@@ -1,0 +1,40 @@
+{
+  "model": {
+    "type": "minecraft:range_dispatch",
+    "property": "hexcasting:gaslighting",
+    "entries": [
+      {
+        "threshold": 0.0,
+        "model": {
+          "type": "minecraft:model",
+          "model": "hexcasting:block/deco/quenched_allay_bricks_small_0"
+        }
+      },
+      {
+        "threshold": 1.0,
+        "model": {
+          "type": "minecraft:model",
+          "model": "hexcasting:block/deco/quenched_allay_bricks_small_1"
+        }
+      },
+      {
+        "threshold": 2.0,
+        "model": {
+          "type": "minecraft:model",
+          "model": "hexcasting:block/deco/quenched_allay_bricks_small_2"
+        }
+      },
+      {
+        "threshold": 3.0,
+        "model": {
+          "type": "minecraft:model",
+          "model": "hexcasting:block/deco/quenched_allay_bricks_small_3"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "hexcasting:block/deco/quenched_allay_bricks_small_0"
+    }
+  }
+}

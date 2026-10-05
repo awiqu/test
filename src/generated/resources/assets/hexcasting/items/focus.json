@@ -1,0 +1,474 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:component",
+    "component": "hexcasting:variant",
+    "cases": [
+      {
+        "when": 0,
+        "model": {
+          "type": "minecraft:range_dispatch",
+          "property": "hexcasting:overlay_layer",
+          "entries": [
+            {
+              "threshold": 0.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus"
+              }
+            },
+            {
+              "threshold": 1.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_0_filled",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            },
+            {
+              "threshold": 2.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_0_sealed",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus"
+          }
+        }
+      },
+      {
+        "when": 1,
+        "model": {
+          "type": "minecraft:range_dispatch",
+          "property": "hexcasting:overlay_layer",
+          "entries": [
+            {
+              "threshold": 0.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_1"
+              }
+            },
+            {
+              "threshold": 1.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_1_filled",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            },
+            {
+              "threshold": 2.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_1_sealed",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_1"
+          }
+        }
+      },
+      {
+        "when": 2,
+        "model": {
+          "type": "minecraft:range_dispatch",
+          "property": "hexcasting:overlay_layer",
+          "entries": [
+            {
+              "threshold": 0.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_2"
+              }
+            },
+            {
+              "threshold": 1.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_2_filled",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            },
+            {
+              "threshold": 2.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_2_sealed",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_2"
+          }
+        }
+      },
+      {
+        "when": 3,
+        "model": {
+          "type": "minecraft:range_dispatch",
+          "property": "hexcasting:overlay_layer",
+          "entries": [
+            {
+              "threshold": 0.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_3"
+              }
+            },
+            {
+              "threshold": 1.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_3_filled",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            },
+            {
+              "threshold": 2.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_3_sealed",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_3"
+          }
+        }
+      },
+      {
+        "when": 4,
+        "model": {
+          "type": "minecraft:range_dispatch",
+          "property": "hexcasting:overlay_layer",
+          "entries": [
+            {
+              "threshold": 0.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_4"
+              }
+            },
+            {
+              "threshold": 1.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_4_filled",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            },
+            {
+              "threshold": 2.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_4_sealed",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_4"
+          }
+        }
+      },
+      {
+        "when": 5,
+        "model": {
+          "type": "minecraft:range_dispatch",
+          "property": "hexcasting:overlay_layer",
+          "entries": [
+            {
+              "threshold": 0.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_5"
+              }
+            },
+            {
+              "threshold": 1.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_5_filled",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            },
+            {
+              "threshold": 2.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_5_sealed",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_5"
+          }
+        }
+      },
+      {
+        "when": 6,
+        "model": {
+          "type": "minecraft:range_dispatch",
+          "property": "hexcasting:overlay_layer",
+          "entries": [
+            {
+              "threshold": 0.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_6"
+              }
+            },
+            {
+              "threshold": 1.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_6_filled",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            },
+            {
+              "threshold": 2.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_6_sealed",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_6"
+          }
+        }
+      },
+      {
+        "when": 7,
+        "model": {
+          "type": "minecraft:range_dispatch",
+          "property": "hexcasting:overlay_layer",
+          "entries": [
+            {
+              "threshold": 0.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_7"
+              }
+            },
+            {
+              "threshold": 1.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_7_filled",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            },
+            {
+              "threshold": 2.0,
+              "model": {
+                "type": "minecraft:model",
+                "model": "hexcasting:item/focus_7_sealed",
+                "tints": [
+                  {
+                    "type": "minecraft:constant",
+                    "value": -1
+                  },
+                  {
+                    "type": "hexcasting:iota_color"
+                  }
+                ]
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_7"
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:range_dispatch",
+      "property": "hexcasting:overlay_layer",
+      "entries": [
+        {
+          "threshold": 0.0,
+          "model": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus"
+          }
+        },
+        {
+          "threshold": 1.0,
+          "model": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_0_filled",
+            "tints": [
+              {
+                "type": "minecraft:constant",
+                "value": -1
+              },
+              {
+                "type": "hexcasting:iota_color"
+              }
+            ]
+          }
+        },
+        {
+          "threshold": 2.0,
+          "model": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/focus_0_sealed",
+            "tints": [
+              {
+                "type": "minecraft:constant",
+                "value": -1
+              },
+              {
+                "type": "hexcasting:iota_color"
+              }
+            ]
+          }
+        }
+      ],
+      "fallback": {
+        "type": "minecraft:model",
+        "model": "hexcasting:item/focus"
+      }
+    }
+  }
+}

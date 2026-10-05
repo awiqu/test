@@ -1,0 +1,18 @@
+{
+  "minVersion": "0.8",
+  "required": true,
+  "compatibilityLevel": "JAVA_21",
+  "package": "at.petrak.hexcasting.fabric.mixin",
+  "mixins": [
+    "FabricAxeItemMixin",
+    "FabricBlockBehaviorMixin",
+    "FabricClipContextMixin",
+    "FabricEnchantmentTableBlockMixin",
+    "FabricItemEntityMixin",
+    "FabricLivingEntityMixin",
+    "FabricMobMixin"
+  ],
+  "client": [
+    "client.FabricMouseHandlerMixin"
+  ]
+}

@@ -1,0 +1,1 @@
+patchouli-26.1-94-patched.jar: Patchouli 26.1-94 (VazkiiMods/Patchouli) with the fabric.mod.json minecraft constraint relaxed to ">=26.1" so that it loads on 26.2 in the dev environment only. Not distributed with the mod.

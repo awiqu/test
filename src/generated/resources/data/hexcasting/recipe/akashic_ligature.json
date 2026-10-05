@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "1": "hexcasting:amethyst_dust",
+    "2": "minecraft:amethyst_shard",
+    "3": "hexcasting:charged_amethyst",
+    "L": "#hexcasting:edified_logs",
+    "P": "#hexcasting:edified_planks"
+  },
+  "pattern": [
+    "LPL",
+    "123",
+    "LPL"
+  ],
+  "result": {
+    "count": 4,
+    "id": "hexcasting:akashic_ligature"
+  }
+}

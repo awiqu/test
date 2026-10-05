@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "A": "hexcasting:charged_amethyst",
+    "D": "#c:music_discs",
+    "F": "#c:ingots/gold"
+  },
+  "pattern": [
+    " F ",
+    "FAF",
+    " D "
+  ],
+  "result": {
+    "count": 1,
+    "id": "hexcasting:artifact"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": "hexcasting:amethyst_dust",
+    "S": "minecraft:deepslate"
+  },
+  "pattern": [
+    " A ",
+    "SSS"
+  ],
+  "result": {
+    "count": 6,
+    "id": "hexcasting:slate"
+  }
+}

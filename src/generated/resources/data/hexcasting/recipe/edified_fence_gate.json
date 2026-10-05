@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "S": "minecraft:stick",
+    "W": "#hexcasting:edified_planks"
+  },
+  "pattern": [
+    "SWS",
+    "SWS"
+  ],
+  "result": {
+    "count": 1,
+    "id": "hexcasting:edified_fence_gate"
+  }
+}

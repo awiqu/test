@@ -1,0 +1,150 @@
+package at.petrak.hexcasting.common.items.magic;
+
+import at.petrak.hexcasting.api.casting.ParticleSpray;
+import at.petrak.hexcasting.api.casting.eval.env.PackagedItemCastEnv;
+import at.petrak.hexcasting.api.casting.eval.vm.CastingVM;
+import at.petrak.hexcasting.api.casting.iota.Iota;
+import at.petrak.hexcasting.api.casting.iota.PatternIota;
+import at.petrak.hexcasting.api.item.HexHolderItem;
+import at.petrak.hexcasting.api.pigment.FrozenPigment;
+import at.petrak.hexcasting.common.lib.HexDataComponents;
+import at.petrak.hexcasting.common.msgs.MsgNewSpiralPatternsS2C;
+import at.petrak.hexcasting.xplat.IXplatAbstractions;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.stats.Stat;
+import net.minecraft.stats.Stats;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
+
+import static at.petrak.hexcasting.api.HexAPI.modLoc;
+
+/**
+ * Item that holds a list of patterns in it ready to be cast
+ */
+public abstract class ItemPackagedHex extends ItemMediaHolder implements HexHolderItem {
+    public static final String TAG_PROGRAM = "patterns";
+    public static final String TAG_PIGMENT = "pigment";
+    public static final Identifier HAS_PATTERNS_PRED = modLoc("has_patterns");
+
+    public ItemPackagedHex(Properties pProperties) {
+        super(pProperties);
+    }
+
+    public abstract boolean breakAfterDepletion();
+
+    public abstract int cooldown();
+
+    @Override
+    public boolean canRecharge(ItemStack stack) {
+        return !breakAfterDepletion();
+    }
+
+    @Override
+    public boolean canProvideMedia(ItemStack stack) {
+        return false;
+    }
+
+    @Override
+    public boolean hasHex(ItemStack stack) {
+        return stack.has(HexDataComponents.HEX_HOLDER_PATTERNS.get());
+    }
+
+    @Override
+    public @Nullable List<Iota> getHex(ItemStack stack, ServerLevel level) {
+        return stack.get(HexDataComponents.HEX_HOLDER_PATTERNS.get());
+    }
+
+    @Override
+    public void writeHex(ItemStack stack, List<Iota> program, @Nullable FrozenPigment pigment, long media) {
+        stack.set(HexDataComponents.HEX_HOLDER_PATTERNS.get(), program);
+        if (pigment != null)
+            stack.set(HexDataComponents.PIGMENT.get(), pigment);
+
+        withMedia(stack, media, media);
+    }
+
+    @Override
+    public void clearHex(ItemStack stack) {
+        stack.remove(HexDataComponents.HEX_HOLDER_PATTERNS.get());
+        stack.remove(HexDataComponents.PIGMENT.get());
+        stack.remove(HexDataComponents.MEDIA.get());
+        stack.remove(HexDataComponents.MEDIA_MAX.get());
+    }
+
+    @Override
+    public @Nullable FrozenPigment getPigment(ItemStack stack) {
+        return stack.get(HexDataComponents.PIGMENT.get());
+    }
+
+    @Override
+    public InteractionResult use(Level world, Player player, InteractionHand usedHand) {
+        var stack = player.getItemInHand(usedHand);
+        if (!hasHex(stack)) {
+            return InteractionResult.FAIL;
+        }
+
+        if (world.isClientSide()) {
+            return InteractionResult.SUCCESS;
+        }
+
+        List<Iota> instrs = getHex(stack, (ServerLevel) world);
+        if (instrs == null) {
+            return InteractionResult.FAIL;
+        }
+        var sPlayer = (ServerPlayer) player;
+        var env = new PackagedItemCastEnv(sPlayer, usedHand);
+        var vm = CastingVM.empty(env);
+        var clientView = vm.queueExecuteAndWrapIotas(instrs, sPlayer.level());
+
+        boolean broken = breakAfterDepletion() && getMedia(stack) == 0;
+
+        Stat<?> stat;
+        if (broken) {
+            stat = Stats.ITEM_BROKEN.get(this);
+        } else {
+            stat = Stats.ITEM_USED.get(this);
+        }
+        player.awardStat(stat);
+
+        sPlayer.getCooldowns().addCooldown(stack, this.cooldown());
+
+        if (clientView.getResolutionType().getSuccess()) {
+            // Somehow we lost spraying particles on each new pattern, so do it here
+            // this also nicely prevents particle spam on trinkets
+            new ParticleSpray(player.position(), new Vec3(0.0, 1.5, 0.0), 0.4, Math.PI / 3, 30)
+                    .sprayParticles(sPlayer.level(), env.getPigment());
+        }
+
+        var sound = env.getSound().sound();
+        if (sound != null) {
+            var soundPos = sPlayer.position();
+            sPlayer.level().playSound(null, soundPos.x, soundPos.y, soundPos.z,
+                    sound, SoundSource.PLAYERS, 1f, 1f);
+        }
+
+        if (broken) {
+            stack.shrink(1);
+            sPlayer.onEquippedItemBroken(stack.getItem(), usedHand == InteractionHand.MAIN_HAND ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND);
+            return InteractionResult.CONSUME;
+        } else {
+            return InteractionResult.SUCCESS;
+        }
+    }
+
+    @Override
+    public ItemUseAnimation getUseAnimation(ItemStack pStack) {
+        return ItemUseAnimation.BLOCK;
+    }
+}

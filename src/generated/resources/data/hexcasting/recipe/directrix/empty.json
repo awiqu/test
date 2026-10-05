@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "A": "hexcasting:charged_amethyst",
+    "C": "minecraft:comparator",
+    "O": "minecraft:observer",
+    "S": "hexcasting:slate_block"
+  },
+  "pattern": [
+    "CSS",
+    "OAO",
+    "SSC"
+  ],
+  "result": {
+    "count": 1,
+    "id": "hexcasting:directrix/empty"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "type": "minecraft:tree",
+  "config": {
+    "decorators": [],
+    "ignore_vines": false,
+    "minimum_size": {
+      "limit": 0,
+      "upper_size": 0,
+      "min_clipped_height": 6,
+      "type": "minecraft:two_layers_feature_size"
+    },
+    "foliage_provider": {
+      "state": {
+        "Properties": {
+          "waterlogged": "false",
+          "persistent": "false",
+          "distance": "7"
+        },
+        "Name": "hexcasting:amethyst_edified_leaves"
+      },
+      "type": "minecraft:simple_state_provider"
+    },
+    "foliage_placer": {
+      "radius": 1,
+      "offset": 5,
+      "height": 5,
+      "type": "minecraft:fancy_foliage_placer"
+    },
+    "trunk_provider": {
+      "entries": [
+        {
+          "data": {
+            "Properties": {
+              "axis": "y"
+            },
+            "Name": "hexcasting:edified_log"
+          },
+          "weight": 8
+        },
+        {
+          "data": {
+            "Properties": {
+              "axis": "y"
+            },
+            "Name": "hexcasting:edified_log_amethyst"
+          },
+          "weight": 1
+        }
+      ],
+      "type": "minecraft:weighted_state_provider"
+    },
+    "trunk_placer": {
+      "base_height": 5,
+      "height_rand_a": 5,
+      "height_rand_b": 3,
+      "type": "minecraft:fancy_trunk_placer"
+    },
+    "below_trunk_provider": {
+      "type": "minecraft:rule_based_state_provider",
+      "rules": [
+        {
+          "if_true": {
+            "type": "minecraft:not",
+            "predicate": {
+              "type": "minecraft:matching_block_tag",
+              "tag": "minecraft:cannot_replace_below_tree_trunk"
+            }
+          },
+          "then": {
+            "type": "minecraft:simple_state_provider",
+            "state": {
+              "Name": "minecraft:dirt"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "C": "minecraft:book",
+    "L": "#hexcasting:edified_logs",
+    "P": "#hexcasting:edified_planks"
+  },
+  "pattern": [
+    "LPL",
+    "CCC",
+    "LPL"
+  ],
+  "result": {
+    "count": 1,
+    "id": "hexcasting:akashic_bookshelf"
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:component",
+    "component": "hexcasting:variant",
+    "cases": [
+      {
+        "when": 0,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:has_component",
+          "component": "hexcasting:patterns",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_0_filled"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket"
+          }
+        }
+      },
+      {
+        "when": 1,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:has_component",
+          "component": "hexcasting:patterns",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_1_filled"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_1"
+          }
+        }
+      },
+      {
+        "when": 2,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:has_component",
+          "component": "hexcasting:patterns",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_2_filled"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_2"
+          }
+        }
+      },
+      {
+        "when": 3,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:has_component",
+          "component": "hexcasting:patterns",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_3_filled"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_3"
+          }
+        }
+      },
+      {
+        "when": 4,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:has_component",
+          "component": "hexcasting:patterns",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_4_filled"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_4"
+          }
+        }
+      },
+      {
+        "when": 5,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:has_component",
+          "component": "hexcasting:patterns",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_5_filled"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_5"
+          }
+        }
+      },
+      {
+        "when": 6,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:has_component",
+          "component": "hexcasting:patterns",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_6_filled"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_6"
+          }
+        }
+      },
+      {
+        "when": 7,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:has_component",
+          "component": "hexcasting:patterns",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_7_filled"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "hexcasting:item/trinket_7"
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:condition",
+      "property": "minecraft:has_component",
+      "component": "hexcasting:patterns",
+      "on_true": {
+        "type": "minecraft:model",
+        "model": "hexcasting:item/trinket_0_filled"
+      },
+      "on_false": {
+        "type": "minecraft:model",
+        "model": "hexcasting:item/trinket"
+      }
+    }
+  }
+}

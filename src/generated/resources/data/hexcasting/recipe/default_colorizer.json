@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": "hexcasting:amethyst_dust",
+    "I": "minecraft:amethyst_shard"
+  },
+  "pattern": [
+    " C ",
+    "CIC",
+    " C "
+  ],
+  "result": {
+    "count": 1,
+    "id": "hexcasting:default_colorizer"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "hexcasting",
+  "version": "${version}",
+  "name": "Hex Casting",
+  "description": "Cast powerful Hexes on the fly by drawing patterns with a staff.",
+  "authors": [
+    "petrak@ (aka gamma-delta)"
+  ],
+  "contact": {
+    "homepage": "https://www.curseforge.com/minecraft/mc-mods/hexcasting",
+    "sources": "https://github.com/gamma-delta/HexMod"
+  },
+  "license": "MIT",
+  "icon": "logo.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      {
+        "adapter": "kotlin",
+        "value": "at.petrak.hexcasting.fabric.FabricHexInitializer"
+      }
+    ],
+    "client": [
+      {
+        "adapter": "kotlin",
+        "value": "at.petrak.hexcasting.fabric.FabricHexClientInitializer"
+      }
+    ],
+    "cardinal-components": [
+      "at.petrak.hexcasting.fabric.cc.HexCardinalComponents"
+    ],
+    "modmenu": [
+      "at.petrak.hexcasting.fabric.interop.ModMenuInterop"
+    ]
+  },
+  "mixins": [
+    "hexplat.mixins.json",
+    "fabricasting.mixins.json"
+  ],
+  "accessWidener": "fabricasting.accesswidener",
+  "depends": {
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabricloader": ">=0.19.5",
+    "fabric-api": "*",
+    "fabric-language-kotlin": ">=1.14.0",
+    "cardinal-components-base": "*",
+    "cardinal-components-entity": "*",
+    "cardinal-components-item": "*",
+    "cardinal-components-block": "*",
+    "cloth-config": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  },
+  "custom": {
+    "cardinal-components": [
+      "hexcasting:brainswept",
+      "hexcasting:favored_pigment",
+      "hexcasting:sentinel",
+      "hexcasting:flight",
+      "hexcasting:altiora",
+      "hexcasting:harness",
+      "hexcasting:patterns",
+      "hexcasting:client_casting_stack",
+      "hexcasting:pigment",
+      "hexcasting:iota_holder",
+      "hexcasting:media_holder",
+      "hexcasting:hex_holder",
+      "hexcasting:variant_item"
+    ]
+  },
+  "recommends": {
+    "patchouli": "*"
+  }
+}

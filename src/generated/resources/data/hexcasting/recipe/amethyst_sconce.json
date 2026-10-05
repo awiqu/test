@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "B": "#c:ingots/copper",
+    "T": "hexcasting:charged_amethyst"
+  },
+  "pattern": [
+    "T",
+    "B"
+  ],
+  "result": {
+    "count": 4,
+    "id": "hexcasting:amethyst_sconce"
+  }
+}

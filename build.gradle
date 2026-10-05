@@ -1,0 +1,90 @@
+plugins {
+    id 'net.fabricmc.fabric-loom'
+    id 'org.jetbrains.kotlin.jvm'
+    id 'maven-publish'
+}
+
+version = modVersion
+group = 'at.petrak.hexcasting'
+base.archivesName = "hexcasting-fabric-${minecraft_version}"
+
+repositories {
+    mavenCentral()
+    // Cardinal Components
+    maven { url = 'https://maven.ladysnake.org/releases' }
+    // Cloth Config / ModMenu
+    maven { url = 'https://maven.shedaniel.me/' }
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+    // Patchouli etc. from Modrinth
+    exclusiveContent {
+        forRepository { maven { url = 'https://api.modrinth.com/maven' } }
+        filter { includeGroup 'maven.modrinth' }
+    }
+    maven { url = 'https://maven.blamejared.com' }
+}
+
+loom {
+    accessWidenerPath = file('src/main/resources/fabricasting.accesswidener')
+}
+
+sourceSets {
+    main {
+        kotlin.srcDirs += 'src/main/java'
+        resources.srcDirs += 'src/generated/resources'
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    implementation "net.fabricmc:fabric-language-kotlin:${fabric_language_kotlin_version}"
+
+    implementation "org.ladysnake.cardinal-components-api:cardinal-components-base:${cardinal_components_version}"
+    implementation "org.ladysnake.cardinal-components-api:cardinal-components-entity:${cardinal_components_version}"
+    implementation "org.ladysnake.cardinal-components-api:cardinal-components-item:${cardinal_components_version}"
+    implementation "org.ladysnake.cardinal-components-api:cardinal-components-block:${cardinal_components_version}"
+
+    // Patchouli has no 26.2 release yet. Compile against the 26.1 API; for dev runs use a copy whose
+    // fabric.mod.json allows 26.2 (see dev-libs/README.md)
+    compileOnly "maven.modrinth:patchouli:${patchouli_version}"
+    // localRuntime files("dev-libs/patchouli-26.1-94-patched.jar")
+    implementation("maven.modrinth:cloth-config:${cloth_config_version}") {
+        exclude(group: 'net.fabricmc.fabric-api')
+    }
+    implementation "com.terraformersmc:modmenu:${modmenu_version}"
+
+    compileOnly 'org.jetbrains:annotations:23.0.0'
+    implementation 'com.google.code.findbugs:jsr305:3.0.1'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    exclude '.cache'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+    options.compilerArgs << '-Xmaxerrs' << '5000'
+}
+
+kotlin {
+    jvmToolchain(25)
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+tasks.register('printCompileClasspath') {
+    doLast {
+        println "CP=" + sourceSets.main.compileClasspath.asPath
+    }
+}

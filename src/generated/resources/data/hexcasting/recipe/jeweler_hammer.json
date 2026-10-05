@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "A": "minecraft:amethyst_shard",
+    "I": "#c:ingots/iron",
+    "N": "#c:nuggets/iron",
+    "S": "#c:rods/wooden"
+  },
+  "pattern": [
+    "IAN",
+    " S ",
+    " S "
+  ],
+  "result": {
+    "count": 1,
+    "id": "hexcasting:jeweler_hammer"
+  }
+}

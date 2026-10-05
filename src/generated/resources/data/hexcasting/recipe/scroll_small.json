@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": "hexcasting:amethyst_dust",
+    "P": "minecraft:paper"
+  },
+  "pattern": [
+    " A",
+    "P "
+  ],
+  "result": {
+    "count": 1,
+    "id": "hexcasting:scroll_small"
+  }
+}

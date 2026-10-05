@@ -1,0 +1,15 @@
+{
+  "model": {
+    "type": "minecraft:condition",
+    "property": "minecraft:has_component",
+    "component": "hexcasting:op_id",
+    "on_true": {
+      "type": "minecraft:model",
+      "model": "hexcasting:item/scroll_ancient_small"
+    },
+    "on_false": {
+      "type": "minecraft:model",
+      "model": "hexcasting:item/scroll_pristine_small"
+    }
+  }
+}
