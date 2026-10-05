@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8.4",
+  "package": "vazkii.patchouli.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+  ],
+  "client": [
+    "client.AccessorClientAdvancements",
+    "client.AccessorKeyMapping",
+    "client.AccessorScreen",
+    "client.MixinClientAdvancements",
+    "client.MixinInventoryScreen",
+    "client.MixinSystemReport"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

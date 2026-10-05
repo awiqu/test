@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": [
+    "Vazkii",
+    "williewillus"
+  ],
+  "contact": {
+    "issues": "https://github.com/VazkiiMods/Patchouli/issues",
+    "sources": "https://github.com/Vazkii/ModsPatchouli"
+  },
+
+  "license": "CC BY-NC-SA 3.0",
+  "icon": "assets/patchouli/icon.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "vazkii.patchouli.fabric.common.FabricModInitializer"
+    ],
+    "client": [
+      "vazkii.patchouli.fabric.client.FabricClientInitializer"
+    ],
+    "fabric-gametest": [
+      "vazkii.patchouli.fabric.common.PatchouliSmokeTest"
+    ]
+  },
+  "mixins": [
+    "patchouli_xplat.mixins.json",
+    "patchouli_fabric.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "fabric-api": ">=${fabric_api_version}",
+    "minecraft": ">=${mc_min_version} <${mc_max_version}"
+  }
+}

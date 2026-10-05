@@ -1,0 +1,342 @@
+package vazkii.patchouli.client.book.gui;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.context.ContextMap;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.display.SlotDisplayContext;
+import net.minecraft.world.level.Level;
+
+import org.jspecify.annotations.Nullable;
+
+import vazkii.patchouli.api.IComponentRenderContext;
+import vazkii.patchouli.client.base.PersistentData;
+import vazkii.patchouli.client.base.PersistentData.BookData;
+import vazkii.patchouli.client.base.PersistentData.Bookmark;
+import vazkii.patchouli.client.book.BookEntry;
+import vazkii.patchouli.client.book.BookPage;
+import vazkii.patchouli.common.book.Book;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+public class GuiBookEntry extends GuiBook implements IComponentRenderContext {
+
+	protected final BookEntry entry;
+	private @Nullable BookPage leftPage;
+	private @Nullable BookPage rightPage;
+
+	public GuiBookEntry(Book book, BookEntry entry) {
+		this(book, entry, 0);
+	}
+
+	public GuiBookEntry(Book book, BookEntry entry, int spread) {
+		super(book, entry.getName());
+		this.entry = entry;
+		this.spread = spread;
+	}
+
+	@Override
+	public void init() {
+		super.init();
+
+		maxSpreads = (int) Math.ceil((float) entry.getPages().size() / 2);
+		setupPages();
+	}
+
+	@Override
+	public void onFirstOpened() {
+		super.onFirstOpened();
+
+		boolean dirty = false;
+		var key = entry.getId();
+
+		BookData data = PersistentData.data.getBookData(book);
+
+		if (!data.viewedEntries.contains(key)) {
+			data.viewedEntries.add(key);
+			dirty = true;
+			entry.markReadStateDirty();
+		}
+
+		int index = data.history.indexOf(key);
+		if (index != 0) {
+			if (index > 0) {
+				data.history.remove(key);
+			}
+
+			data.history.addFirst(key);
+			while (data.history.size() > GuiBookEntryList.ENTRIES_PER_PAGE) {
+				data.history.remove(GuiBookEntryList.ENTRIES_PER_PAGE);
+			}
+
+			dirty = true;
+		}
+
+		if (dirty) {
+			PersistentData.save();
+		}
+	}
+
+	@Override
+	void drawForegroundElements(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
+		drawPage(graphics, leftPage, mouseX, mouseY, partialTicks);
+		drawPage(graphics, rightPage, mouseX, mouseY, partialTicks);
+
+		if (rightPage == null) {
+			drawPageFiller(graphics, entry.getBook());
+		}
+	}
+
+	@Override
+	public boolean mouseClickedScaled(MouseButtonEvent event, boolean doubleClick) {
+		return clickPage(leftPage, event, doubleClick)
+				|| clickPage(rightPage, event, doubleClick)
+				|| super.mouseClickedScaled(event, doubleClick);
+	}
+
+	void drawPage(GuiGraphicsExtractor graphics, @Nullable BookPage page, int mouseX, int mouseY, float pticks) {
+		if (page == null) {
+			return;
+		}
+
+		graphics.pose().pushMatrix();
+		graphics.pose().translate(page.left, page.top);
+		page.extractRenderState(graphics, mouseX - page.left, mouseY - page.top, pticks);
+		graphics.pose().popMatrix();
+	}
+
+	private boolean clickPage(@Nullable BookPage page, MouseButtonEvent event, boolean doubleClick) {
+		if (page != null) {
+			return page.mouseClicked(new MouseButtonEvent(event.x() - page.left, event.y() - page.top, event.buttonInfo()), doubleClick);
+		}
+
+		return false;
+	}
+
+	@Override
+	void onPageChanged() {
+		setupPages();
+		needsBookmarkUpdate = true;
+	}
+
+	private void setupPages() {
+		if (leftPage != null) {
+			leftPage.onHidden(this);
+		}
+		if (rightPage != null) {
+			rightPage.onHidden(this);
+		}
+
+		List<BookPage> pages = entry.getPages();
+		int leftNum = spread * 2;
+		int rightNum = (spread * 2) + 1;
+
+		leftPage = leftNum < pages.size() ? pages.get(leftNum) : null;
+		rightPage = rightNum < pages.size() ? pages.get(rightNum) : null;
+
+		if (leftPage != null) {
+			leftPage.onDisplayed(this, LEFT_PAGE_X, TOP_PADDING);
+		}
+		if (rightPage != null) {
+			rightPage.onDisplayed(this, RIGHT_PAGE_X, TOP_PADDING);
+		}
+	}
+
+	public BookEntry getEntry() {
+		return entry;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		return obj == this || (obj instanceof GuiBookEntry && ((GuiBookEntry) obj).entry == entry && ((GuiBookEntry) obj).spread == spread);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hashCode(entry) * 31 + Objects.hashCode(spread);
+	}
+
+	@Override
+	public boolean canBeOpened() {
+		return !entry.isLocked() && !equals(Minecraft.getInstance().gui.screen());
+	}
+
+	@Override
+	protected boolean shouldAddAddBookmarkButton() {
+		return !isBookmarkedAlready();
+	}
+
+	boolean isBookmarkedAlready() {
+		if (entry.getId() == null) {
+			return false;
+		}
+
+		Identifier entryKey = entry.getId();
+		BookData data = PersistentData.data.getBookData(book);
+
+		for (Bookmark bookmark : data.bookmarks) {
+			if (bookmark.entry().equals(entryKey) && bookmark.spread() == spread) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	@Override
+	public void bookmarkThis() {
+		var entryKey = entry.getId();
+		BookData data = PersistentData.data.getBookData(book);
+		data.bookmarks.add(new Bookmark(entryKey, spread));
+		PersistentData.save();
+		needsBookmarkUpdate = true;
+	}
+
+	public static void displayOrBookmark(GuiBook currGui, BookEntry entry) {
+		Book book = currGui.book;
+		GuiBookEntry gui = new GuiBookEntry(currGui.book, entry);
+
+		if (Minecraft.getInstance().hasShiftDown()) {
+			BookData data = PersistentData.data.getBookData(book);
+
+			if (gui.isBookmarkedAlready()) {
+				Identifier key = entry.getId();
+				data.bookmarks.removeIf((bm) -> bm.entry().equals(key) && bm.spread() == 0);
+				PersistentData.save();
+				currGui.needsBookmarkUpdate = true;
+				return;
+			} else if (data.bookmarks.size() < MAX_BOOKMARKS) {
+				gui.bookmarkThis();
+				currGui.needsBookmarkUpdate = true;
+				return;
+			}
+		}
+
+		book.getContents().openLexiconGui(gui, true);
+	}
+
+	@Override
+	public Screen getGui() {
+		return this;
+	}
+
+	@Override
+	public Style getFontStyle() {
+		return book.getFontStyle();
+	}
+
+	@Override
+	public void renderItemStack(GuiGraphicsExtractor graphics, int x, int y, int mouseX, int mouseY, ItemStack stack) {
+		if (stack.isEmpty()) {
+			return;
+		}
+
+		graphics.item(stack, x, y);
+		graphics.itemDecorations(font, stack, x, y);
+
+		if (isMouseInRelativeRange(mouseX, mouseY, x, y, 16, 16)) {
+			setTooltipStack(stack);
+		}
+	}
+
+	@Override
+	public void renderIngredient(GuiGraphicsExtractor graphics, int x, int y, int mouseX, int mouseY, Ingredient ingr) {
+		Level level = Minecraft.getInstance().level;
+		if (level == null) {
+			return;
+		}
+		ContextMap context = SlotDisplayContext.fromLevel(level);
+		List<ItemStack> stacks = ingr.display().resolveForStacks(context);
+		if (!stacks.isEmpty()) {
+			renderItemStack(graphics, x, y, mouseX, mouseY, stacks.get((ticksInBook / 20) % stacks.size()));
+		}
+	}
+
+	@Override
+	public void setHoverTooltip(List<String> tooltip) {
+		setTooltip(tooltip.stream().map(Component::literal).collect(Collectors.toList()));
+	}
+
+	@Override
+	public void setHoverTooltipComponents(List<Component> tooltip) {
+		setTooltip(tooltip);
+	}
+
+	@Override
+	public boolean isAreaHovered(int mouseX, int mouseY, int x, int y, int w, int h) {
+		return isMouseInRelativeRange(mouseX, mouseY, x, y, w, h);
+	}
+
+	@Override
+	public boolean navigateToEntry(Identifier entry, int page, boolean push) {
+		BookEntry bookEntry = book.getContents().entries.get(entry);
+		if (bookEntry != null && !bookEntry.isLocked()) {
+			displayLexiconGui(new GuiBookEntry(book, bookEntry, page), push);
+			return true;
+		}
+		return false;
+	}
+
+	@SuppressWarnings("removal")
+	@Override
+	public void registerButton(Button button, int pageNum, Runnable onClick) {
+		addWidget(button, pageNum);
+	}
+
+	@Override
+	public void addWidget(AbstractWidget widget, int pageNum) {
+		widget.setX(widget.getX() + (bookLeft + ((pageNum % 2) == 0 ? LEFT_PAGE_X : RIGHT_PAGE_X)));
+		widget.setY(widget.getY() + bookTop);
+		addRenderableWidget(widget);
+	}
+
+	@Override
+	public boolean keyPressed(KeyEvent event) {
+		if (Minecraft.getInstance().options.keyInventory.matches(event)) {
+			this.onClose();
+			return true;
+		}
+		return super.keyPressed(event);
+	}
+
+	@Override
+	protected boolean shouldAddMarkReadButton() {
+		return false;
+	}
+
+	@Override
+	public Identifier getBookTexture() {
+		return book.bookTexture;
+	}
+
+	@Override
+	public Identifier getCraftingTexture() {
+		return book.craftingTexture;
+	}
+
+	@Override
+	public int getTextColor() {
+		return book.textColor;
+	}
+
+	@Override
+	public int getHeaderColor() {
+		return book.headerColor;
+	}
+
+	@Override
+	public int getTicksInBook() {
+		return ticksInBook;
+	}
+}

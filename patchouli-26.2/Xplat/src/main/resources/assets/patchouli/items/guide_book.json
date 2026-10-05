@@ -1,0 +1,9 @@
+{
+  "model": {
+    "type": "patchouli:book",
+    "base": {
+      "type": "minecraft:model",
+      "model": "patchouli:item/guide_book"
+    }
+  }
+}

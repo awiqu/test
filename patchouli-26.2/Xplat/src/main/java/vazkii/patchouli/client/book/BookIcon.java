@@ -1,0 +1,46 @@
+package vazkii.patchouli.client.book;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
+
+import vazkii.patchouli.api.PatchouliAPI;
+import vazkii.patchouli.common.util.ItemStackUtil;
+
+public sealed interface BookIcon permits BookIcon.StackIcon, BookIcon.TextureIcon {
+	void extractRenderState(GuiGraphicsExtractor graphics, int x, int y);
+
+	record StackIcon(ItemStack stack) implements BookIcon {
+		@Override
+		public void extractRenderState(GuiGraphicsExtractor graphics, int x, int y) {
+			graphics.item(stack(), x, y);
+			graphics.itemDecorations(Minecraft.getInstance().font, stack(), x, y);
+		}
+	}
+
+	record TextureIcon(Identifier texture) implements BookIcon {
+		@Override
+		public void extractRenderState(GuiGraphicsExtractor graphics, int x, int y) {
+			//graphics.setColor(1F, 1F, 1F, 1F);
+			graphics.blit(RenderPipelines.GUI_TEXTURED, texture(), x, y, 0, 0, 16, 16, 16, 16);
+		}
+	}
+
+	static BookIcon from(String str, HolderLookup.Provider registries) {
+		if (str.endsWith(".png")) {
+			return new TextureIcon(Identifier.tryParse(str));
+		} else {
+			try {
+				ItemStack stack = ItemStackUtil.loadStackFromString(str, registries);
+				return new StackIcon(stack);
+			} catch (Exception e) {
+				PatchouliAPI.LOGGER.warn("Invalid icon item stack: {}", e.getMessage());
+				return new StackIcon(ItemStack.EMPTY);
+			}
+		}
+	}
+
+}

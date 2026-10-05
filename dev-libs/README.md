@@ -1,1 +1,1 @@
-patchouli-26.1-94-patched.jar: Patchouli 26.1-94 (VazkiiMods/Patchouli) with the fabric.mod.json minecraft constraint relaxed to ">=26.1" so that it loads on 26.2 in the dev environment only. Not distributed with the mod.
+patchouli-26.2-94-port.jar: our port of Patchouli (VazkiiMods/Patchouli, branch 26.1, CC BY-NC-SA 3.0) to Minecraft 26.2. Source tree: patchouli-26.2/ at the repo root.

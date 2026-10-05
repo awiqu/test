@@ -45,10 +45,9 @@ dependencies {
     implementation "org.ladysnake.cardinal-components-api:cardinal-components-item:${cardinal_components_version}"
     implementation "org.ladysnake.cardinal-components-api:cardinal-components-block:${cardinal_components_version}"
 
-    // Patchouli has no 26.2 release yet. Compile against the 26.1 API; for dev runs use a copy whose
-    // fabric.mod.json allows 26.2 (see dev-libs/README.md)
-    compileOnly "maven.modrinth:patchouli:${patchouli_version}"
-    // localRuntime files("dev-libs/patchouli-26.1-94-patched.jar")
+    // Patchouli has no official 26.2 release: use our port (sources in patchouli-26.2/)
+    compileOnly files("dev-libs/patchouli-26.2-94-port.jar")
+    localRuntime files("dev-libs/patchouli-26.2-94-port.jar")
     implementation("maven.modrinth:cloth-config:${cloth_config_version}") {
         exclude(group: 'net.fabricmc.fabric-api')
     }
