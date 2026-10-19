@@ -77,12 +77,31 @@ export interface Marker {
   kind: 'in' | 'out';
 }
 
+export interface TileItem {
+  slot: number;
+  id: string;
+  count: number;
+}
+
+/** Блок-сущность (контейнер с предметами) в структуре. */
+export interface TileEntityData {
+  x: number;
+  y: number;
+  z: number;
+  id: string;
+  /** Содержимое контейнера (бочки). */
+  items?: TileItem[];
+  /** Дополнительные целочисленные поля NBT (например, OutputSignal у компаратора). */
+  ints?: Record<string, number>;
+}
+
 export interface Structure {
   sx: number;
   sy: number;
   sz: number;
   blocks: StructBlock[];
   markers: Marker[];
+  tileEntities?: TileEntityData[];
 }
 
 export interface CompileStats {
@@ -277,6 +296,9 @@ function blockSpecFor(
       return { name: 'minecraft:lever', props: { face: 'floor', facing: DIR_NAMES[g.dir[i]], powered: 'false' } };
     case K.Button:
       return { name: 'minecraft:stone_button', props: { face: 'floor', facing: DIR_NAMES[g.dir[i]], powered: 'false' } };
+    default:
+      // Barrel/Comparator используются только в структурах ПЗУ и не попадают в сетку компилятора
+      return null;
   }
 }
 

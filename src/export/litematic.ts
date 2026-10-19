@@ -75,7 +75,19 @@ export function buildLitematic(structure: Structure, opts: LitematicOptions): Ui
     Size: size(sx, sy, sz),
     BlockStatePalette: paletteTag,
     Entities: nbt.list('end', []),
-    TileEntities: nbt.list('end', []),
+    TileEntities: nbt.list(
+      'compound',
+      (structure.tileEntities ?? []).map((t) => {
+        const c: Record<string, Tag> = { x: nbt.int(t.x), y: nbt.int(t.y), z: nbt.int(t.z), id: nbt.string(t.id) };
+        if (t.items)
+          c.Items = nbt.list(
+            'compound',
+            t.items.map((it) => nbt.compound({ Slot: nbt.byte(it.slot), id: nbt.string(it.id), count: nbt.int(it.count) })),
+          );
+        for (const [k, v] of Object.entries(t.ints ?? {})) c[k] = nbt.int(v);
+        return nbt.compound(c);
+      }),
+    ),
     PendingBlockTicks: nbt.list('end', []),
     PendingFluidTicks: nbt.list('end', []),
     BlockStates: nbt.longArray(packBlockStates(indices, bits)),
