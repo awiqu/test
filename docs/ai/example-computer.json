@@ -1,0 +1,211 @@
+{
+  "format": "redlogic-computer",
+  "spec": {
+    "name": "Мини-4",
+    "arch": "accumulator",
+    "dataBits": 4,
+    "regCount": 1,
+    "instrBits": 8,
+    "opcodeBits": 4,
+    "pcBits": 4,
+    "romWords": 16,
+    "ramAddrBits": 4,
+    "ramWords": 10,
+    "flags": [
+      "Z",
+      "C"
+    ],
+    "aluOps": [
+      "ADD",
+      "SUB",
+      "AND",
+      "OR",
+      "XOR",
+      "NOT",
+      "SHL",
+      "SHR"
+    ],
+    "stack": {
+      "enabled": false,
+      "words": 0
+    },
+    "clockTicks": 4,
+    "devices": [
+      {
+        "id": "leds1",
+        "type": "leds",
+        "options": {
+          "count": 4
+        }
+      },
+      {
+        "id": "switches1",
+        "type": "switches",
+        "options": {
+          "count": 4
+        }
+      },
+      {
+        "id": "sevenseg1",
+        "type": "sevenseg",
+        "options": {}
+      }
+    ]
+  },
+  "instructions": [
+    {
+      "mnemonic": "NOP",
+      "opcode": 0,
+      "format": "",
+      "description": "Ничего не делает",
+      "pseudo": "ничего не делать",
+      "code": "nop()",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "HLT",
+      "opcode": 1,
+      "format": "",
+      "description": "Останавливает процессор",
+      "pseudo": "остановить процессор",
+      "code": "halt()",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "LDI",
+      "opcode": 2,
+      "format": "imm",
+      "description": "Загружает константу",
+      "pseudo": "A ← imm",
+      "code": "A = imm",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "LDA",
+      "opcode": 3,
+      "format": "addr",
+      "description": "Читает слово из памяти данных (или порта устройства)",
+      "pseudo": "A ← mem[addr]",
+      "code": "A = M[addr]",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "STA",
+      "opcode": 4,
+      "format": "addr",
+      "description": "Пишет слово в память данных (или порт устройства)",
+      "pseudo": "mem[addr] ← A",
+      "code": "M[addr] = A",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "ADD",
+      "opcode": 5,
+      "format": "addr",
+      "description": "Сложение",
+      "pseudo": "A ← A + mem[addr], обновить флаги",
+      "code": "A = add(A, M[addr])",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "SUB",
+      "opcode": 6,
+      "format": "addr",
+      "description": "Вычитание",
+      "pseudo": "A ← A − mem[addr], обновить флаги",
+      "code": "A = sub(A, M[addr])",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "AND",
+      "opcode": 7,
+      "format": "addr",
+      "description": "И",
+      "pseudo": "A ← A & mem[addr], обновить флаги",
+      "code": "A = and(A, M[addr])",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "OR",
+      "opcode": 8,
+      "format": "addr",
+      "description": "ИЛИ",
+      "pseudo": "A ← A | mem[addr], обновить флаги",
+      "code": "A = or(A, M[addr])",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "XOR",
+      "opcode": 9,
+      "format": "addr",
+      "description": "Исключающее ИЛИ",
+      "pseudo": "A ← A ^ mem[addr], обновить флаги",
+      "code": "A = xor(A, M[addr])",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "JMP",
+      "opcode": 10,
+      "format": "target",
+      "description": "Переход на адрес в ПЗУ",
+      "pseudo": "PC ← target",
+      "code": "PC = target",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "JZ",
+      "opcode": 11,
+      "format": "target",
+      "description": "Переход при условии Z=1 (ноль)",
+      "pseudo": "если Z=1 (ноль): PC ← target",
+      "code": "if (Z) PC = target",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "JNZ",
+      "opcode": 12,
+      "format": "target",
+      "description": "Переход при условии Z=0 (не ноль)",
+      "pseudo": "если Z=0 (не ноль): PC ← target",
+      "code": "if (!Z) PC = target",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "JC",
+      "opcode": 13,
+      "format": "target",
+      "description": "Переход при условии C=1 (перенос)",
+      "pseudo": "если C=1 (перенос): PC ← target",
+      "code": "if (C) PC = target",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "JNC",
+      "opcode": 14,
+      "format": "target",
+      "description": "Переход при условии C=0 (нет переноса)",
+      "pseudo": "если C=0 (нет переноса): PC ← target",
+      "code": "if (!C) PC = target",
+      "cycles": 1
+    },
+    {
+      "mnemonic": "NOT",
+      "opcode": 15,
+      "format": "",
+      "description": "Инверсия",
+      "pseudo": "A ← ~A, обновить флаги",
+      "code": "A = not(A)",
+      "cycles": 1
+    }
+  ],
+  "programs": [
+    {
+      "name": "Счётчик",
+      "source": "; Счётчик на аккумуляторе\n        ldi 1\n        sta 0               ; M[0] = 1\n        ldi 0\n        sta 1               ; M[1] = счётчик\nloop:   lda 1\n        add 0\n        sta 1\n        sta LEDS\n        sta SEG\n        jmp loop\n"
+    },
+    {
+      "name": "Сумма рычагов",
+      "source": "; рычаги + 3\n        ldi 3\n        sta 0\nloop:   lda SWITCH\n        add 0\n        sta SEG\n        sta LEDS\n        jmp loop\n"
+    }
+  ]
+}
