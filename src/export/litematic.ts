@@ -122,6 +122,26 @@ export function litematicFromSettings(structure: Structure, s: ExportSettings): 
   });
 }
 
+const TRANSLIT: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u',
+  ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+
+/** Имя файла из ASCII: кириллица транслитерируется (иначе браузеры могут потерять имя при скачивании). */
 export function safeFileName(name: string): string {
-  return (name || 'redlogic').trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_').slice(0, 64) || 'redlogic';
+  const ascii = [...(name || '')]
+    .map((c) => {
+      const t = TRANSLIT[c.toLowerCase()];
+      if (t === undefined) return c;
+      return c === c.toLowerCase() ? t : t.charAt(0).toUpperCase() + t.slice(1);
+    })
+    .join('');
+  return (
+    ascii
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 64) || 'redlogic'
+  );
 }

@@ -8,6 +8,7 @@ import { AsmStep } from './AsmStep';
 import { ProgramStep } from './ProgramStep';
 import { RomStep } from './RomStep';
 import { AiStep } from './AiStep';
+import { HardwareStep } from './HardwareStep';
 
 export function ComputersTab() {
   const step = useComputer((s) => s.step);
@@ -46,6 +47,7 @@ export function ComputersTab() {
         {step === 'asm' && <AsmStep />}
         {step === 'prog' && <ProgramStep />}
         {step === 'rom' && <RomStep />}
+        {step === 'hw' && <HardwareStep />}
         {step === 'ai' && <AiStep />}
       </main>
     </div>

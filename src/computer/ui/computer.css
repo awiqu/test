@@ -45,6 +45,8 @@
 .cs-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .cs-footer { display: flex; align-items: center; gap: 12px; padding-top: 6px; flex-wrap: wrap; }
 .bad-text { color: #ff9c92; }
+.field .check { margin: 4px 0; }
+.field input[type=checkbox], .check input[type=checkbox] { width: auto; flex: none; }
 .num-row { display: flex; align-items: center; gap: 10px; }
 .field small { line-height: 1.35; }
 .field input.bad { border-color: var(--red); }
@@ -322,3 +324,13 @@
   .cs-block { grid-template-columns: 22px 1fr; }
   .cs-block-fields, .cs-block-tools { grid-column: 1 / -1; }
 }
+
+.cs-arch { margin: 0; padding-left: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; counter-reset: arch; }
+.cs-arch li { counter-increment: arch; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px 9px 40px; position: relative; display: flex; flex-direction: column; gap: 2px; }
+.cs-arch li::before { content: counter(arch); position: absolute; left: 10px; top: 9px; width: 20px; height: 20px; border-radius: 50%; background: var(--red-2); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.cs-arch span { color: var(--muted); font-size: 12px; }
+.cs-hw { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 14px; align-items: start; }
+.cs-hw-list { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 0; }
+.cs-hw-list .cs-card em { color: var(--muted); font-size: 12px; font-style: normal; }
+.cs-hw-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+@media (max-width: 1100px) { .cs-hw { grid-template-columns: 1fr; } .cs-hw-list { position: static; } }

@@ -213,7 +213,7 @@ export function RomStep() {
       <div className="cs-footer">
         <button className="btn" onClick={() => setStep('prog')}>← Программы</button>
         <div className="tb-spacer" />
-        <button className="btn primary big" onClick={() => setStep('ai')}>Далее: ИИ и документация →</button>
+        <button className="btn primary big" onClick={() => setStep('hw')}>Далее: аппаратура →</button>
       </div>
     </div>
   );

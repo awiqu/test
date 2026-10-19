@@ -5,7 +5,7 @@ import { buildPresetIsa } from './isa';
 import { newProject, parseComputer, programId } from './project';
 import { DEFAULT_ROM_OPTIONS, RomOptions } from './rom';
 
-export type Step = 'spec' | 'isa' | 'asm' | 'prog' | 'rom' | 'ai';
+export type Step = 'spec' | 'isa' | 'asm' | 'prog' | 'rom' | 'hw' | 'ai';
 
 export const STEPS: { id: Step; title: string; hint: string }[] = [
   { id: 'spec', title: 'Характеристики', hint: 'Разрядность, память, устройства' },
@@ -13,6 +13,7 @@ export const STEPS: { id: Step; title: string; hint: string }[] = [
   { id: 'asm', title: 'Ассемблер', hint: 'Синтаксис и Python-версия' },
   { id: 'prog', title: 'Программы', hint: 'Редактор и симулятор' },
   { id: 'rom', title: 'ПЗУ из бочек', hint: 'Экспорт в .litematic' },
+  { id: 'hw', title: 'Аппаратура', hint: 'Схемы узлов процессора' },
   { id: 'ai', title: 'ИИ и документация', hint: 'Доки, промпты, импорт' },
 ];
 

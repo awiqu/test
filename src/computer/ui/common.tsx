@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { Issue } from '../types';
 import { useEditor } from '../../editor/store';
+import { safeFileName } from '../../export/litematic';
 
 export function notify(msg: string): void {
   useEditor.getState().notify(msg);
@@ -138,5 +139,5 @@ export function hexOf(n: number, digits: number): string {
 }
 
 export function downloadName(base: string): string {
-  return (base || 'computer').trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_').slice(0, 48) || 'computer';
+  return safeFileName(base || 'computer');
 }

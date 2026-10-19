@@ -7,6 +7,7 @@ import { designCircuitPrompt, fixPrompt } from '../computer/docs';
 import { CopyButton, IssueList } from '../computer/ui/common';
 import { confirmDialog } from './ask';
 import { saveFile } from '../storage/project';
+import { safeFileName } from '../export/litematic';
 
 const SAMPLE = `# Полусумматор: сумма и перенос
 input a b
@@ -106,7 +107,7 @@ export function NetlistDialog() {
               <textarea className="mono cs-code tall" readOnly value={current} aria-label="Текущая схема" />
               <div className="result-actions">
                 <CopyButton className="btn" text={current} />
-                <button className="btn" onClick={() => void saveFile(`${name || 'circuit'}.netlist.txt`, current, 'text/plain')}>Скачать .txt</button>
+                <button className="btn" onClick={() => void saveFile(`${safeFileName(name || 'circuit')}.netlist.txt`, current, 'text/plain')}>Скачать .txt</button>
               </div>
             </>
           )}

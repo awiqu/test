@@ -63,7 +63,7 @@ def main():
     sprint(r, 60)
     bad = 0
     total = 0
-    for e in want['map']:
+    for e in want.get('map') or want['barrels']:
         for b in e['barrels']:
             total += 1
             ax, ay, az = OX + b['x'] + 2, OY + b['y'], OZ + b['z']

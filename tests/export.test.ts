@@ -44,3 +44,14 @@ describe('litematic export', () => {
     );
   });
 });
+
+describe('safeFileName', () => {
+  it('transliterates Cyrillic so browsers keep the download name', async () => {
+    const { safeFileName } = await import('../src/export/litematic');
+    expect(safeFileName('Мини-4 Счётчик')).toBe('Mini-4_Schetchik');
+    expect(safeFileName('Моя схема')).toBe('Moya_shema');
+    expect(safeFileName('  a/b:c  ')).toBe('a_b_c');
+    expect(safeFileName('')).toBe('redlogic');
+    expect(safeFileName('???')).toBe('redlogic');
+  });
+});
