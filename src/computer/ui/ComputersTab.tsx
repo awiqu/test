@@ -1,4 +1,5 @@
 import './computer.css';
+import { Component, ReactNode } from 'react';
 import { STEPS, Step, useComputer } from '../store';
 import { validateSpec } from '../spec';
 import { validateIsa } from '../isa';
@@ -9,6 +10,31 @@ import { ProgramStep } from './ProgramStep';
 import { RomStep } from './RomStep';
 import { AiStep } from './AiStep';
 import { HardwareStep } from './HardwareStep';
+
+/** Ошибка в одном шаге не должна ронять всё приложение. */
+class StepBoundary extends Component<{ step: Step; children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidUpdate(prev: { step: Step }) {
+    if (prev.step !== this.props.step && this.state.error) this.setState({ error: null });
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="cs-page">
+        <div className="badge bad">
+          <b>Этот шаг не смог открыться:</b> {this.state.error.message}
+          <div className="cs-actions" style={{ marginTop: 8 }}>
+            <button className="btn" onClick={() => useComputer.getState().setStep('spec')}>К характеристикам</button>
+            <button className="btn" onClick={() => this.setState({ error: null })}>Попробовать снова</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
 
 export function ComputersTab() {
   const step = useComputer((s) => s.step);
@@ -42,6 +68,7 @@ export function ComputersTab() {
         </div>
       </nav>
       <main className="cs-content">
+        <StepBoundary step={step}>
         {step === 'spec' && <SpecStep />}
         {step === 'isa' && <IsaStep />}
         {step === 'asm' && <AsmStep />}
@@ -49,6 +76,7 @@ export function ComputersTab() {
         {step === 'rom' && <RomStep />}
         {step === 'hw' && <HardwareStep />}
         {step === 'ai' && <AiStep />}
+        </StepBoundary>
       </main>
     </div>
   );

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useComputer } from '../store';
 import { HARDWARE } from '../hardware';
 import { parseNetlist } from '../../model/netlist';
+import { hasCycle } from '../../sim/logic';
 import { applyCircuit } from '../../ui/NetlistDialog';
 import { useMode } from '../../ui/mode';
 import { useEditor } from '../../editor/store';
@@ -78,6 +79,11 @@ export function HardwareStep() {
               ))}
             </div>
             {built.error && <div className="badge bad">{built.error}</div>}
+            {built.parsed?.circuit && hasCycle(built.parsed.circuit) && (
+              <div className="badge bad">
+                В схеме есть обратные связи (защёлки): в редакторе она считается и показывает сигналы, но экспорт в .litematic для таких схем пока не поддерживается.
+              </div>
+            )}
             {built.parsed && (
               <>
                 <div className={`badge ${gates > 60 ? 'bad' : 'ok'}`}>
