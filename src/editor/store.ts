@@ -42,7 +42,7 @@ interface EditorState {
   live: boolean;
   showTable: boolean;
   exportOpen: boolean;
-  dialog: 'projects' | 'computers' | null;
+  dialog: 'projects' | 'netlist' | null;
   toast: string | null;
 
   setTool: (t: Tool) => void;
@@ -83,7 +83,7 @@ interface EditorState {
   setLive: (v: boolean) => void;
   setShowTable: (v: boolean) => void;
   setExportOpen: (v: boolean) => void;
-  setDialog: (d: 'projects' | 'computers' | null) => void;
+  setDialog: (d: 'projects' | 'netlist' | null) => void;
   notify: (msg: string) => void;
 }
 

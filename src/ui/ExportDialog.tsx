@@ -9,7 +9,7 @@ import { buildLitematic, safeFileName } from '../export/litematic';
 import { saveFile } from '../storage/project';
 import { GATE_INFO, GateType } from '../model/types';
 
-function BlockPicker({ label, value, onChange }: { label: string; value: BlockChoice; onChange: (v: BlockChoice) => void }) {
+export function BlockPicker({ label, value, onChange }: { label: string; value: BlockChoice; onChange: (v: BlockChoice) => void }) {
   const mat = MATERIALS.find((m) => m.id === value.material) ?? MATERIALS[0];
   return (
     <div className="field">

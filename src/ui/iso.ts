@@ -150,6 +150,19 @@ export function drawIso(
         ctx.fill();
         break;
       }
+      case K.Barrel:
+        cube(x, y, z, '#8a6a3c');
+        cube(x, y + 1, z, '#5b4426', 0.02, 0.28);
+        break;
+      case K.Comparator: {
+        cube(x, y, z, '#a3a3a3', 0.22, 0.06);
+        const [px, py] = proj(x, y + 0.22, z);
+        ctx.fillStyle = b.spec.props?.powered === 'true' ? '#ff5a48' : '#7a1f1a';
+        ctx.beginPath();
+        ctx.arc(px, py + unit * 0.5, Math.max(1.5, unit * 0.16), 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
       case K.Lever:
       case K.Button: {
         cube(x, y, z, '#777', 0.18, 0.2);
@@ -251,6 +264,18 @@ export function drawPlan(
         ctx.fill();
         break;
       }
+      case K.Barrel:
+        ctx.fillStyle = '#8a6a3c';
+        ctx.fillRect(x, y, cell, cell);
+        ctx.fillStyle = '#5b4426';
+        ctx.fillRect(x + cell * 0.2, y + cell * 0.2, cell * 0.6, cell * 0.6);
+        break;
+      case K.Comparator:
+        ctx.fillStyle = '#a3a3a3';
+        ctx.fillRect(x + 1, y + 1, cell - 2, cell - 2);
+        ctx.fillStyle = b.spec.props?.powered === 'true' ? '#ff5a48' : '#7a1f1a';
+        ctx.fillRect(x + cell * 0.35, y + cell * 0.35, cell * 0.3, cell * 0.3);
+        break;
       case K.Lever:
       case K.Button:
         ctx.fillStyle = '#6b6b6b';

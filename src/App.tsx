@@ -5,13 +5,16 @@ import { TopBar } from './ui/TopBar';
 import { Inspector } from './ui/Inspector';
 import { ExportDialog } from './ui/ExportDialog';
 import { ProjectsDialog } from './ui/ProjectsDialog';
-import { ComputersDialog } from './ui/ComputersDialog';
+import { NetlistDialog } from './ui/NetlistDialog';
+import { ComputersTab } from './computer/ui/ComputersTab';
+import { useMode } from './ui/mode';
 import { AskHost } from './ui/ask';
 import { useEditor } from './editor/store';
 
 export function App() {
   const toast = useEditor((s) => s.toast);
   const placing = useEditor((s) => s.placing);
+  const mode = useMode((s) => s.mode);
 
   useEffect(() => {
     // при первой загрузке подгоняем вид под схему
@@ -22,17 +25,21 @@ export function App() {
   return (
     <div className="app">
       <TopBar />
-      <div className="main">
-        <Toolbar />
-        <main className="stage">
-          <Canvas />
-          {placing && <div className="placing-hint">Кликните по полю, чтобы поставить гейт · Shift — ставить несколько · Esc — отмена</div>}
-        </main>
-        <Inspector />
-      </div>
+      {mode === 'circuits' ? (
+        <div className="main">
+          <Toolbar />
+          <main className="stage">
+            <Canvas />
+            {placing && <div className="placing-hint">Кликните по полю, чтобы поставить гейт · Shift — ставить несколько · Esc — отмена</div>}
+          </main>
+          <Inspector />
+        </div>
+      ) : (
+        <ComputersTab />
+      )}
       <ExportDialog />
       <ProjectsDialog />
-      <ComputersDialog />
+      <NetlistDialog />
       <AskHost />
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
