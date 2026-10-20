@@ -217,10 +217,21 @@ export interface FloorOptions {
  * Карточки — всё, что уже лежит в Vox без владельца; их верхняя граница определяет, где можно вести провод.
  */
 export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): FloorStats {
+  const base = opts.layers ?? 2;
+  // сначала два слоя; если часть цепей не проложить — ещё один слой (стоят провода выше, плата та же)
+  for (let layers = base; ; layers++) {
+    try {
+      return routeFloorLayers(v, nets, opts, layers, opts.attempts ?? (layers === base ? 4 : 8));
+    } catch (e) {
+      if (!(e instanceof FloorError) || e.failed.length === 0 || layers >= base + 1) throw e;
+      opts.progress?.(`Слоёв проводов не хватило (${e.failed.length} цепей) — добавляю слой…`);
+    }
+  }
+}
+
+function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, attempts: number): FloorStats {
   const t0 = performance.now();
   floorDebug.edges.length = 0;
-  const NL = opts.layers ?? 2;
-  const attempts = opts.attempts ?? 12;
   // границы и высоты карточек
   const bb = v.bounds();
   const pad = 20;
@@ -347,6 +358,29 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
     return [x, z];
   };
 
+  /** Дети узлов дерева цепи и требуемая сила сигнала в узле (максимум по приёмникам ниже). */
+  const treeInfo = (s: NetState): { children: Map<number, number[]>; need: (nd: number) => number } => {
+    const children = new Map<number, number[]>();
+    for (const [node, par] of s.parent) {
+      if (par < 0) continue;
+      if (!children.has(par)) children.set(par, []);
+      children.get(par)!.push(node);
+    }
+    const sinkReq = new Map<number, number>();
+    s.sinkEsc.forEach((e) => sinkReq.set(termNode(e), e.strength));
+    // повторитель можно поставить на любом плоском ребре, поэтому через плоское ребро требуется только 4; рампа стоит 2 единицы
+    const req = new Map<number, number>();
+    const need = (nd: number): number => {
+      const cached = req.get(nd);
+      if (cached !== undefined) return cached;
+      let r = sinkReq.get(nd) ?? 1;
+      for (const c of children.get(nd) ?? []) r = Math.max(r, s.viaTo.has(c) ? need(c) + 2 : 4);
+      req.set(nd, r);
+      return r;
+    };
+    return { children, need };
+  };
+
   const bannedVia = new Set<number>();
   /** Цепи, которые не удалось проложить, получают приоритет в следующей попытке (как «выдавливание вперёд» при перерасстановке). */
   const prio = new Map<number, number>();
@@ -450,6 +484,8 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
           return true;
         };
         const relaxVia = (from: number, to: number, d: number): void => {
+          // две рампы подряд запрещены: между ними нужно плоское ребро, где можно поставить повторитель
+          if (prevVia[from] === 1 && prev[from] >= 0) return;
           const nd2 = d + 7 + extra(to);
           if (seen[to] !== stamp || nd2 < dist[to]) {
             seen[to] = stamp;
@@ -462,7 +498,7 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
         while (heap.size > 0) {
           const [nd, d] = heap.pop();
           if (d > dist[nd]) continue;
-          if (s.parent.has(nd)) {
+          if (s.parent.has(nd) && !(prevVia[nd] === 1 && prev[nd] >= 0 && s.viaTo.has(nd))) {
             hit = nd;
             break;
           }
@@ -600,6 +636,21 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
       }
     };
     while (queue.length > 0) routeNet(queue.shift()!);
+    // запас силы сигнала: в каждом узле силы должно хватать на самый требовательный приёмник ниже
+    for (const s of states) {
+      if (failedBy.has(s.idx)) continue;
+      const { children, need } = treeInfo(s);
+      let ok = true;
+      const walk = (nd: number, strength: number): void => {
+        if (strength < need(nd)) ok = false;
+        for (const c of children.get(nd) ?? []) walk(c, s.viaTo.has(c) ? strength - 2 : strength <= 9 || strength - 2 < need(c) ? 15 : strength - 2);
+      };
+      walk(termNode(s.srcEsc), s.srcEsc.strength);
+      if (!ok) {
+        failedBy.set(s.idx, [`${s.net.name} (не хватает силы сигнала)`]);
+        prio.set(s.idx, (prio.get(s.idx) ?? 0) + 1);
+      }
+    }
     const failed = [...failedBy.values()].flat();
     opts.progress?.(`  не проложено цепей: ${failed.length}${failed.length ? ` (${failed.slice(0, 4).join('; ')})` : ''}`);
     if (failed.length === 0) finalStates = order;
@@ -616,12 +667,7 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
   let vias = 0;
   for (const s of finalStates) {
     v.owner = s.net.name;
-    const children = new Map<number, number[]>();
-    for (const [node, par] of s.parent) {
-      if (par < 0) continue;
-      if (!children.has(par)) children.set(par, []);
-      children.get(par)!.push(node);
-    }
+    const { children, need } = treeInfo(s);
     const root = termNode(s.srcEsc);
     // выходы
     const emitEscape = (e: Escape): void => {
@@ -632,23 +678,6 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
     };
     emitEscape(s.srcEsc);
     s.sinkEsc.forEach(emitEscape);
-    const sinkReq = new Map<number, number>();
-    s.sinkEsc.forEach((e) => sinkReq.set(termNode(e), e.strength));
-    // нужная сила на узле: максимум по потомкам (повторитель можно поставить на любом прямом ребре)
-    const req = new Map<number, number>();
-    const need = (nd: number): number => {
-      const cached = req.get(nd);
-      if (cached !== undefined) return cached;
-      let r = sinkReq.get(nd) ?? 1;
-      for (const c of children.get(nd) ?? []) {
-        const viaEdge = s.viaTo.has(c);
-        const need2 = viaEdge ? need(c) + 2 : 4;
-        r = Math.max(r, need2);
-      }
-      req.set(nd, r);
-      return r;
-    };
-    need(root);
     const emitNode = (nd: number): void => {
       const x = nodeX(ii(nd));
       const z = nodeZ(jj(nd));

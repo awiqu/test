@@ -67,6 +67,24 @@ describe('over-cell floor routing', () => {
     }, 900000);
   }
 
+  for (const layers of [1, 3]) {
+    it(`dense scene with ${layers} base layer(s) (extra layer added on demand)`, () => {
+      const { v, levers, lamps, nets } = scene(4, 12, 26, 230);
+      const st = routeFloor(v, nets, { layers });
+      process.stderr.write(`layers ${layers}: ${JSON.stringify(st)}\n`);
+      expect(findShorts(v)).toEqual([]);
+      const sim = new TickSim(v);
+      sim.settle(30000);
+      for (let i = 0; i < levers.length; i++) {
+        sim.setLever(...levers[i].pos, true);
+        sim.run(1200);
+        for (const l of lamps) expect(sim.litAt(...l.pos), `lever ${i} on, lamp of lever ${l.lever}`).toBe(l.lever === i);
+        sim.setLever(...levers[i].pos, false);
+        sim.run(1200);
+      }
+    }, 900000);
+  }
+
   for (const seed of [1, 2, 3]) {
     it(`levers → lamps, scene ${seed}: no shorts, lamps follow their lever`, () => {
       const { v, levers, lamps, nets } = scene(seed, 5, 9, 160);
