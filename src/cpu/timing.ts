@@ -150,6 +150,19 @@ export function buildTimed(plan: Plan, st: BuildSettings, progress: (msg: string
       const halfPeriod = recommendedHalfPeriod(timing);
       const clockHalfTicks = st.clockHalfTicks > 0 ? st.clockHalfTicks : halfPeriod;
       const built = st.clock === 'lever' ? probe : buildComputer(plan, { ...st, guardRt, clockHalfTicks }, progress);
+      // плата с автогенератором раскладывается заново (карточка генератора другая): проверяем и её, остановив генератор рычагом «стоп»
+      if (st.clock !== 'lever' && st.layout !== 'stack' && built.probes.clockStop) {
+        const sim = new TickSim(built.vox);
+        sim.settle(100000);
+        sim.setLever(...built.probes.clockStop, true);
+        sim.setLever(...built.probes.reset, true);
+        sim.run(3000);
+        const bad = brokenNets(built, sim);
+        if (bad.length > 0) {
+          progress(`Самопроверка проводки: разрыв в цепях ${bad.slice(0, 6).join(', ')} — строю раскладку колонкой`);
+          return buildTimed(plan, { ...st, layout: 'stack' }, progress);
+        }
+      }
       return { built, timing, guardRt, halfPeriod, passes };
     }
     guardRt += Math.max(2, Math.ceil((MIN_LOCK_MARGIN - worst) / 2) + 2);

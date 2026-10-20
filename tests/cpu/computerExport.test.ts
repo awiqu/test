@@ -92,6 +92,15 @@ describe('computer export', () => {
     expect(e.summary.romWords).toBeGreaterThan(0);
   });
 
+  it('auto clock with measured timing: compact board, self-check passes', () => {
+    const p = newProject('acc4');
+    const e = exportComputer(p, { ...defaultExportSettings(), clock: 'auto', clockHalfTicks: 0 });
+    expect(e.summary.layout).toBe('compact');
+    expect(e.built.probes.clockStop).not.toBeNull();
+    expect(e.summary.halfPeriod).toBeGreaterThan(100);
+    expect(Math.max(e.summary.size.x, e.summary.size.z)).toBeLessThan(320);
+  }, 600000);
+
   it('refuses a program the hardware cannot execute', () => {
     const p = newProject('acc4');
     p.programs[0].source = 'bogus 1\n';
