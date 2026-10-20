@@ -69,12 +69,21 @@ export function descendBottom(v: Vox, x: number, zB: number): XYZ {
  * Приподнятая линия вдоль Z (опорные блоки на y=2, пыль на y=3). Повторители ставятся сразу за входным концом и далее не реже чем
  * через 12 клеток — только в «свободных» рядах (free); sections — на 12 клеток нет ограничения у внешних концов.
  */
-export function elevatedLine(v: Vox, xv: number, zFrom: number, zTo: number, flow: 'S' | 'N', free: (z: number) => boolean, outBoost = false): void {
+export function elevatedLine(
+  v: Vox,
+  xv: number,
+  zFrom: number,
+  zTo: number,
+  flow: 'S' | 'N',
+  free: (z: number) => boolean,
+  outBoost = false,
+  firstAt?: number,
+): void {
   const step = flow === 'S' ? 1 : -1;
   const start = flow === 'S' ? zFrom : zTo;
   const end = flow === 'S' ? zTo : zFrom;
   const boosts = new Set<number>();
-  let prev = start + step;
+  let prev = firstAt ?? start + step;
   boosts.add(prev);
   while (Math.abs(end - prev) > 12) {
     let z = prev + step * 12;
@@ -106,7 +115,8 @@ export function addressPair(v: Vox, xd: number, zTop: number, zTap0: number, zLa
     v.solid(x, 2, zLast + 1);
     v.set(x, 3, zLast + 1, { kind: K.Dust });
   }
-  elevatedLine(v, xi, zTap0, zLast, 'N', free);
+  // первый повторитель — на самом входном конце (zLast — свободный ряд): за ним строка отвода последнего слова, а в повторителе отвода нет
+  elevatedLine(v, xi, zTap0, zLast, 'N', free, false, zLast);
   return term;
 }
 

@@ -89,6 +89,23 @@ describe('data array: RAM words, output port with lamps, input port with levers'
     expect(t.read()).toBe(2);
   });
 
+  it('a write changes only the addressed word (including the last row)', () => {
+    const rows: DataRow[] = [
+      { addr: 0, kind: 'ram' },
+      { addr: 1, kind: 'ram' },
+      { addr: 2, kind: 'out', name: 'LEDS', count: 4 },
+      { addr: 3, kind: 'out', name: 'SEG', count: 4 },
+    ];
+    const t = setup(2, 4, rows);
+    const words = () => t.lay.cell.map((cs) => cs.reduce((acc, c, j) => acc + ((c && t.sim.litAt(...c) ? 1 : 0) << j), 0));
+    const expected = [0, 0, 0, 0];
+    for (const [a, d] of [[0, 3], [1, 5], [2, 9], [3, 6], [0, 1], [1, 2], [2, 4], [3, 15], [0, 0], [1, 7]] as const) {
+      t.write(a, d);
+      expected[a] = d;
+      expect(words(), `write ${a}=${d}`).toEqual(expected);
+    }
+  });
+
   it('acc4-sized array: 10 RAM words + 3 ports, 4-bit data, 4-bit address', () => {
     const rows: DataRow[] = [];
     for (let a = 0; a < 10; a++) rows.push({ addr: a, kind: 'ram' });
