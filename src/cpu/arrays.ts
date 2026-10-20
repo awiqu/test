@@ -21,7 +21,7 @@ export interface RomOptions {
 }
 
 export interface RomLayout {
-  /** Верхняя клетка каждой линии адреса: [бит][0=прямая,1=инверсная]. */
+  /** Клемма (пыль на земле) прямой линии адреса каждого бита: addr[бит][0]; обратная линия строится внутри факелом. */
   addr: XYZ[][];
   /** Нижняя клетка каждой линии столбца (выход ПЗУ). */
   out: XYZ[];
@@ -36,13 +36,90 @@ export const ROM_PZ = 4;
 export const ROM_PX = 6;
 export const LINE_PITCH = 4;
 /** Линии адреса и столбцов выходят за границу массива на столько клеток — туда подключается маршрутизатор. */
-const EXT = 5;
+export const EXT = 5;
 
 /** Ставит «отвод»: сигнал с приподнятой линии (xv, y=3) спускается на землю и через повторитель идёт на восток. */
 function tap(v: Vox, xv: number, z: number): void {
   v.solid(xv + 1, 1, z); // опора лестницы (на ней же питается повторитель)
   v.set(xv + 1, 2, z, { kind: K.Dust });
   v.repeater(xv + 2, 1, z, W, 1);
+}
+
+/** Спуск с приподнятой линии на землю у верхнего края: возвращает клемму (пыль на земле). */
+export function descendTop(v: Vox, x: number, zT: number): XYZ {
+  v.solid(x, 1, zT - 1);
+  v.set(x, 2, zT - 1, { kind: K.Dust });
+  v.dust(x, 1, zT - 2);
+  return [x, 1, zT - 2];
+}
+
+/** То же у нижнего края. */
+export function descendBottom(v: Vox, x: number, zB: number): XYZ {
+  v.solid(x, 1, zB + 1);
+  v.set(x, 2, zB + 1, { kind: K.Dust });
+  v.dust(x, 1, zB + 2);
+  return [x, 1, zB + 2];
+}
+
+/**
+ * Приподнятая линия вдоль Z (опорные блоки на y=2, пыль на y=3). Повторители ставятся сразу за входным концом и далее не реже чем
+ * через 12 клеток — только в «свободных» рядах (free); sections — на 12 клеток нет ограничения у внешних концов.
+ */
+export function elevatedLine(v: Vox, xv: number, zFrom: number, zTo: number, flow: 'S' | 'N', free: (z: number) => boolean, outBoost = false): void {
+  const step = flow === 'S' ? 1 : -1;
+  const start = flow === 'S' ? zFrom : zTo;
+  const end = flow === 'S' ? zTo : zFrom;
+  const boosts = new Set<number>();
+  let prev = start + step;
+  boosts.add(prev);
+  while (Math.abs(end - prev) > 12) {
+    let z = prev + step * 12;
+    while (!free(z) && z !== prev) z -= step;
+    if (z === prev) break;
+    boosts.add(z);
+    prev = z;
+  }
+  if (outBoost) boosts.add(zTo - 3);
+  for (let z = zFrom; z <= zTo; z++) {
+    v.solid(xv, 2, z);
+    if (boosts.has(z)) v.set(xv, 3, z, { kind: K.Repeater, dir: flow === 'S' ? N : S, delay: 1 });
+    else v.set(xv, 3, z, { kind: K.Dust });
+  }
+}
+
+/**
+ * Пара линий адреса: прямая (вход сверху, клемма на земле) и обратная. Обратная получается из прямой факелом-инвертором
+ * под нижним концом и течёт вверх.
+ */
+export function addressPair(v: Vox, xd: number, zTop: number, zTap0: number, zLast: number, free: (z: number) => boolean): XYZ {
+  const xi = xd + LINE_PITCH;
+  elevatedLine(v, xd, zTop, zLast, 'S', free);
+  const term = descendTop(v, xd, zTop);
+  // инвертор: блок в продолжении линии, факел сбоку, пыль до обратной линии
+  v.set(xd, 3, zLast + 1, { kind: K.Solid, mat: 0 });
+  v.torch(xd + 1, 3, zLast + 1, 3);
+  for (let x = xd + 2; x <= xi; x++) {
+    v.solid(x, 2, zLast + 1);
+    v.set(x, 3, zLast + 1, { kind: K.Dust });
+  }
+  elevatedLine(v, xi, zTap0, zLast, 'N', free);
+  return term;
+}
+
+/**
+ * Цепочка «ИЛИ несовпадений»: отводы с приподнятых линий (xs по возрастанию) складываются повторителями вдоль ряда z.
+ * Возвращает x, с которого цепочку можно продолжать пылью (выход последнего повторителя).
+ */
+export function decodeChain(v: Vox, xs: number[], z: number): number {
+  const sorted = [...xs].sort((a, b) => a - b);
+  let x = sorted[0];
+  for (const xv of sorted) {
+    // пыль от текущего x до xv (включительно) на земле
+    for (let xx = x; xx <= xv; xx++) if (xx > sorted[0] || xx === xv) v.dust(xx, 1, z);
+    tap(v, xv, z);
+    x = xv + 3; // выход повторителя — пыль на xv+3
+  }
+  return x;
 }
 
 /**
@@ -58,28 +135,14 @@ export function buildRom(v: Vox, ox: number, oz: number, o: RomOptions): RomLayo
   const zLast = rowZ[rows - 1] + 1;
   const items = o.itemsOne ?? 27;
 
-  // усилитель в приподнятой линии ставится в «пустом» ряду после каждых трёх слов
-  const boostRows = new Set<number>();
-  for (let w = 1; w < rows - 1; w += 2) boostRows.add(rowZ[w] + 1);
-  const boostRow = (z: number): boolean => boostRows.has(z);
+  // «пустые» ряды между словами: в них можно ставить повторители приподнятых линий
+  const freeRows = new Set<number>(rowZ.map((z) => z + 1));
+  const free = (z: number): boolean => z < oz || z > zLast || freeRows.has(z);
 
-  // линии адреса (приподнятые, вдоль Z)
+  // линии адреса: клемма только у прямой линии, обратная получается факелом
   const addr: XYZ[][] = [];
   const lineX = (bit: number, comp: number): number => ox + 2 * LINE_PITCH * bit + LINE_PITCH * comp;
-  for (let b = 0; b < P; b++) {
-    const pair: XYZ[] = [];
-    for (let c = 0; c < 2; c++) {
-      const xv = lineX(b, c);
-      for (let z = oz - EXT; z <= zLast; z++) {
-        v.solid(xv, 2, z);
-        // повторитель сразу за входной клеммой: линия адреса стартует с полных 15
-        if (boostRow(z) || z === oz - EXT + 1) v.set(xv, 3, z, { kind: K.Repeater, dir: N, delay: 1 });
-        else v.set(xv, 3, z, { kind: K.Dust });
-      }
-      pair.push([xv, 3, oz - EXT]);
-    }
-    addr.push(pair);
-  }
+  for (let b = 0; b < P; b++) addr.push([addressPair(v, lineX(b, 0), oz - EXT, oz, zLast, free)]);
 
   // ряды
   for (let w = 0; w < rows; w++) {
@@ -90,13 +153,7 @@ export function buildRom(v: Vox, ox: number, oz: number, o: RomOptions): RomLayo
     for (let b = 0; b < P; b++) taps.push(lineX(b, ((w >> b) & 1) === 1 ? 1 : 0));
     taps.sort((a, b2) => a - b2);
     // цепочка линии слова: пыль между отводами и до конца матрицы
-    let x = taps[0];
-    for (const xv of taps) {
-      // пыль от текущего x до xv (включительно) на земле
-      for (let xx = x; xx <= xv; xx++) if (xx > taps[0] || xx === xv) v.dust(xx, 1, zWL);
-      tap(v, xv, zWL);
-      x = xv + 3; // выход повторителя — пыль на xv+3
-    }
+    const x = decodeChain(v, taps, zWL);
     // линия слова через матрицу: усилитель в зазоре после каждого второго столбца (затухание 1 на клетку)
     const boostX = new Set<number>();
     for (let j = 0; j < cols - 1; j += 2) boostX.add(colX[j] + 5);
@@ -118,17 +175,12 @@ export function buildRom(v: Vox, ox: number, oz: number, o: RomOptions): RomLayo
     }
   }
 
-  // столбцы выхода (приподнятые, вдоль Z) с усилителями каждые 3 слова
+  // столбцы выхода (приподнятые, вдоль Z) с усилителями; выходная клемма снова получает почти полные 15
   const out: XYZ[] = [];
   for (let j = 0; j < cols; j++) {
     const xb = colX[j] + 4;
-    for (let z = rowZ[0]; z <= zLast + EXT; z++) {
-      v.solid(xb, 2, z);
-      // выходной повторитель: на клемме снова полные 15
-      if (boostRow(z) || z === zLast + 2) v.set(xb, 3, z, { kind: K.Repeater, dir: N, delay: 1 });
-      else v.set(xb, 3, z, { kind: K.Dust });
-    }
-    out.push([xb, 3, zLast + EXT]);
+    elevatedLine(v, xb, rowZ[0], zLast + EXT, 'S', free, true);
+    out.push(descendBottom(v, xb, zLast + EXT));
   }
   return { addr, out, rowZ, colX, bounds: { x0: ox, x1: xEnd, z0: oz, z1: zLast } };
 }

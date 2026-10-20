@@ -65,3 +65,37 @@ export function lampPart(v: Vox, x: number, z: number, name: string, tag?: strin
     bbox: { x0: x - 1, z0: z, x1: x, z1: z, y1: 2 },
   };
 }
+
+/**
+ * Автоматический тактовый генератор: кольцо из торча-инвертора и 2N+1 повторителей с задержкой `delay`.
+ * Полупериод ≈ 1 + (2N+1)·delay редстоун-тиков. Рычаг «стоп» запирает первый повторитель кольца: пока он включён, такта нет.
+ */
+export function clockRingPart(v: Vox, x: number, z: number, n: number, delay = 4, name = 'clockring'): Part & { stop: XYZ; half: number } {
+  const E = 1;
+  const S = 2;
+  v.solid(x, 1, z); // блок под торчем
+  v.torch(x + 1, 1, z, W);
+  v.dust(x + 2, 1, z);
+  for (let i = 0; i < n; i++) v.repeater(x + 3 + i, 1, z, W, delay);
+  const xe = x + 3 + n;
+  v.dust(xe, 1, z);
+  v.dust(xe, 1, z + 1);
+  v.dust(xe, 1, z + 2);
+  for (let i = 0; i < n; i++) v.repeater(xe - 1 - i, 1, z + 2, E, delay);
+  v.dust(x + 2, 1, z + 2);
+  v.dust(x + 1, 1, z + 2);
+  v.dust(x, 1, z + 2);
+  v.repeater(x, 1, z + 1, S, delay); // замыкает кольцо: бьёт в блок под торчем
+  // стоп-замок на первом повторителе
+  v.repeater(x + 3, 1, z - 1, N, 1);
+  v.dust(x + 3, 1, z - 2);
+  v.lever(x + 3, 1, z - 3, true, 'clock-stop');
+  v.dust(xe + 1, 1, z + 1); // отвод тактового сигнала
+  return {
+    name,
+    pins: { out: { dust: [xe + 1, 1, z + 1], free: [[xe + 2, 1, z + 1], [xe + 3, 1, z + 1]] } },
+    bbox: { x0: x - 1, z0: z - 4, x1: xe + 1, z1: z + 3, y1: 3 },
+    stop: [x + 3, 1, z - 3],
+    half: 1 + (2 * n + 1) * delay,
+  };
+}

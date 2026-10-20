@@ -32,7 +32,6 @@ describe('sequencer: PC flip-flops + PC logic + ROM + clock', () => {
     board.connect('lkS', clkPins.get('lkS')!.dust, ffs.map((f) => f.get('lkS')!));
     for (let i = 0; i < P; i++) {
       board.connect(`pc${i}`, ffs[i].get('Q')!, [pclPins.get(`pc${i}`)!.dust, rom.addr[i][0]]);
-      board.connect(`npc${i}`, pclPins.get(`npc${i}`)!.dust, [rom.addr[i][1]]);
       board.connect(`d${i}`, pclPins.get(`d${i}`)!.dust, [ffs[i].get('D')!]);
       board.connect(`ob${i}`, rom.out[i], [pclPins.get(`ob${i}`)!.dust]);
     }

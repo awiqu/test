@@ -16,6 +16,8 @@ export interface NetTree {
 export interface RouteOptions {
   maxLevel: number;
   maxExpansions: number;
+  /** Штраф за клетку рядом (через одну) с чужой пылью: разводит параллельные провода. */
+  spread?: number;
 }
 
 export function makeTree(id: number, root: number[], sinks: number[][]): NetTree {
@@ -91,6 +93,8 @@ export class Router {
   private pin: Int32Array;
   private pin2: Int32Array;
   private pinCells = new Map<number, number[]>();
+  /** Что поставлено маршрутизатором для сети: пыль, опоры и резервы воздуха (для снятия проводов). */
+  private routed = new Map<number, { dust: number[]; supports: number[]; nosolid: number[] }>();
   private cur = 0;
   expansions = 0;
   lastFail = '';
@@ -145,6 +149,23 @@ export class Router {
     }
   }
 
+  /** Резерв клеток под подходы к пинам сети (другие сети в них пыль не ставят). */
+  reserveCells(net: number, cells: number[]): void {
+    const g = this.g;
+    const mine = this.pinCells.get(net) ?? [];
+    for (const i of cells) {
+      if (g.kind[i] !== K.Air) continue;
+      if (this.pin[i] === -1) {
+        this.pin[i] = net;
+        mine.push(i);
+      } else if (this.pin2[i] === -1 && this.pin[i] !== net) {
+        this.pin2[i] = net;
+        mine.push(i);
+      }
+    }
+    this.pinCells.set(net, mine);
+  }
+
   private releasePins(net: number): void {
     for (const i of this.pinCells.get(net) ?? []) {
       if (this.pin[i] === net) this.pin[i] = -1;
@@ -173,6 +194,81 @@ export class Router {
       if (g.kind[ni] === K.Dust && ni !== target) return `adjacent own dust (${nx},${qy},${nz})`;
     }
     return this.canPlaceDust(qx, qy, qz, net, -2, target, true) ? 'ok' : 'diag conflict';
+  }
+
+  /** Снимает все провода сети (пыль, опоры, резервы) — для перекладки. */
+  ripUp(net: number): void {
+    const g = this.g;
+    const rec = this.routed.get(net);
+    if (!rec) return;
+    for (const i of rec.dust) {
+      g.kind[i] = K.Air;
+      g.net[i] = -1;
+      g.routed[i] = 0;
+    }
+    for (const i of rec.supports) {
+      if (g.routed[i]) {
+        g.kind[i] = K.Air;
+        g.routed[i] = 0;
+      }
+    }
+    for (const i of rec.nosolid) g.res[i] &= ~RES_NOSOLID;
+    this.routed.delete(net);
+  }
+
+  /** Сети с проложенными проводами рядом с клеткой (радиус r по горизонтали, уровни 1…3). */
+  netsNear(x: number, z: number, r: number, except: number): Set<number> {
+    const g = this.g;
+    const out = new Set<number>();
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const nx = x + dx;
+        const nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= g.W || nz >= g.D) continue;
+        for (let y = 1; y <= Math.min(3, g.H - 1); y++) {
+          const i = g.idx(nx, y, nz);
+          if (g.kind[i] === K.Dust && g.routed[i] && g.net[i] !== except && g.net[i] >= 0) out.add(g.net[i]);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Быстрая проверка «замурован ли приёмник»: заливка по клеткам, куда можно поставить пыль сети (с ограничением числа клеток).
+   * Если залив не выходит за пределы небольшой области — путь искать бессмысленно.
+   */
+  private enclosed(tree: NetTree, target: number): boolean {
+    const g = this.g;
+    const net = tree.id;
+    const limit = 4000;
+    const fixed = new Set<number>();
+    for (const chain of tree.sinks) for (let i = 1; i < chain.length; i++) fixed.add(chain[i]);
+    const seen = new Set<number>([target]);
+    const queue: number[] = [target];
+    let head = 0;
+    while (head < queue.length && queue.length < limit) {
+      const c = queue[head++];
+      const x = g.x(c);
+      const y = g.y(c);
+      const z = g.z(c);
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DX[d];
+        const nz = z + DZ[d];
+        if (nx < 0 || nz < 0 || nx >= g.W || nz >= g.D) continue;
+        for (let dy = -1; dy <= 1; dy++) {
+          const qy = y + dy;
+          if (qy < 1 || qy >= g.H) continue;
+          const qi = g.idx(nx, qy, nz);
+          if (seen.has(qi)) continue;
+          if (g.kind[qi] === K.Dust && tree.parent.has(qi) && !fixed.has(qi)) return false; // дошли до дерева сети
+          if (!this.canPlaceDust(nx, qy, nz, net, -2, target, true)) continue;
+          seen.add(qi);
+          queue.push(qi);
+        }
+      }
+    }
+    return queue.length < limit;
   }
 
   /** Быстрая проверка: есть ли хоть один свободный подход к приёмнику. */
@@ -242,6 +338,19 @@ export class Router {
     return true;
   }
 
+  /** Есть ли чужая пыль на расстоянии 2 по осям (через одну клетку). */
+  private nearForeign(qx: number, qy: number, qz: number, net: number): boolean {
+    const g = this.g;
+    for (let d = 0; d < 4; d++) {
+      const nx = qx + 2 * DX[d];
+      const nz = qz + 2 * DZ[d];
+      if (nx < 0 || nz < 0 || nx >= g.W || nz >= g.D) continue;
+      const ni = g.idx(nx, qy, nz);
+      if (g.kind[ni] === K.Dust && g.net[ni] !== net) return true;
+    }
+    return false;
+  }
+
   /** Допустимы ли доп. условия перехода p→q (воздух над p / под ходом вниз). */
   private moveOk(px: number, py: number, pz: number, d: number, dy: number): boolean {
     const g = this.g;
@@ -263,7 +372,7 @@ export class Router {
    * Прокладывает провод от любой клетки дерева до клетки приёмника `target`.
    * Возвращает список новых клеток пыли (по порядку от старта) и стартовую клетку.
    */
-  private search(tree: NetTree, target: number): { start: number; path: number[] } | null {
+  private search(tree: NetTree, target: number, margin = Infinity, budgetOverride?: number): { start: number; path: number[] } | null {
     const g = this.g;
     const net = tree.id;
     const tx = g.x(target);
@@ -282,7 +391,24 @@ export class Router {
       this.prev[node] = -1;
       heap.push(H(g.x(cell), g.z(cell)), node);
     }
-    const budget = this.opts.maxExpansions;
+    const budget = budgetOverride ?? this.opts.maxExpansions;
+    // ограничивающая рамка поиска: дерево сети + приёмник + запас
+    let bx0 = tx;
+    let bx1 = tx;
+    let bz0 = tz;
+    let bz1 = tz;
+    if (margin !== Infinity) {
+      for (const cell of tree.parent.keys()) {
+        bx0 = Math.min(bx0, g.x(cell));
+        bx1 = Math.max(bx1, g.x(cell));
+        bz0 = Math.min(bz0, g.z(cell));
+        bz1 = Math.max(bz1, g.z(cell));
+      }
+      bx0 -= margin;
+      bx1 += margin;
+      bz0 -= margin;
+      bz1 += margin;
+    }
     let steps = 0;
     while (heap.size > 0) {
       const node = heap.pop();
@@ -311,6 +437,7 @@ export class Router {
         const nx = px + DX[d];
         const nz = pz + DZ[d];
         if (nx < 0 || nz < 0 || nx >= g.W || nz >= g.D) continue;
+        if (margin !== Infinity && (nx < bx0 || nx > bx1 || nz < bz0 || nz > bz1)) continue;
         for (let m = 0; m < 3; m++) {
           const dy = m === 0 ? 0 : m === 1 ? 1 : -1;
           const qy = py + dy;
@@ -328,6 +455,7 @@ export class Router {
           if (ld !== 4 && ld !== d) cost += 0.45;
           if (dy !== 0) cost += 1.4;
           if (qy > 1) cost += 0.25 * (qy - 1);
+          if (this.opts.spread && this.nearForeign(nx, qy, nz, net)) cost += this.opts.spread;
           const ng = gp + cost;
           const nnode = qi * 5 + d;
           if (this.stamp[nnode] === this.cur && this.gScore[nnode] <= ng) continue;
@@ -382,11 +510,24 @@ export class Router {
       g.routed[s] = 1;
     }
     // резервы воздуха
+    const rec = this.routed.get(net) ?? { dust: [], supports: [], nosolid: [] };
+    this.routed.set(net, rec);
+    for (const q of path) {
+      rec.dust.push(q);
+      rec.supports.push(g.idx(g.x(q), g.y(q) - 1, g.z(q)));
+    }
     prevCell = start;
     for (const q of seq) {
       const dy = g.y(q) - g.y(prevCell);
-      if (dy === 1) g.res[g.idx(g.x(prevCell), g.y(prevCell) + 1, g.z(prevCell))] |= RES_NOSOLID;
-      else if (dy === -1) g.res[g.idx(g.x(q), g.y(prevCell), g.z(q))] |= RES_NOSOLID;
+      if (dy === 1) {
+        const i = g.idx(g.x(prevCell), g.y(prevCell) + 1, g.z(prevCell));
+        g.res[i] |= RES_NOSOLID;
+        rec.nosolid.push(i);
+      } else if (dy === -1) {
+        const i = g.idx(g.x(q), g.y(prevCell), g.z(q));
+        g.res[i] |= RES_NOSOLID;
+        rec.nosolid.push(i);
+      }
       prevCell = q;
     }
     // дерево
@@ -427,7 +568,15 @@ export class Router {
         this.lastFail = `no access net ${tree.id} target (${this.g.x(target)},${this.g.y(target)},${this.g.z(target)})`;
         return false;
       }
-      const res = this.search(tree, target);
+      if (this.enclosed(tree, target)) {
+        this.lastFail = `enclosed net ${tree.id} target (${this.g.x(target)},${this.g.y(target)},${this.g.z(target)})`;
+        return false;
+      }
+      let res = null as ReturnType<Router['search']>;
+      for (const [margin, share] of [[24, 0.06], [64, 0.25], [Infinity, 1]] as const) {
+        res = this.search(tree, target, margin, Math.floor(this.opts.maxExpansions * share));
+        if (res) break;
+      }
       if (!res) {
         this.lastFail = `search failed net ${tree.id} target (${this.g.x(target)},${this.g.y(target)},${this.g.z(target)})`;
         return false;

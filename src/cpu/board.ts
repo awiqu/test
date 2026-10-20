@@ -35,12 +35,21 @@ export class Board {
   private margin: number;
   readonly nets: BoardNet[] = [];
   private keepOut: { x0: number; z0: number; x1: number; z1: number; y1: number; free: XYZ[] }[] = [];
+  /** Коридоры подхода к пинам: клетки коридора и боковые клетки (резервируются за сетью, подключённой к пину). */
+  private lanes = new Map<string, { cells: XYZ[]; side: XYZ[]; open: XYZ[] }>();
+  private ring: number;
+  private freeCells: XYZ[] = [];
   g!: Grid;
+  /** Для диагностики: последний использованный маршрутизатор. */
+  lastRouter?: Router;
+  /** Журнал прокладки (если задан). */
+  trace?: (msg: string) => void;
 
   /** Размеры платы вычисляются по содержимому при прокладке; H — число уровней по высоте. */
-  constructor(H = 9, margin = 12) {
+  constructor(H = 9, margin = 12, ring = 4) {
     this.H = H;
     this.margin = margin;
+    this.ring = ring;
   }
 
   private fit(): void {
@@ -67,6 +76,31 @@ export class Board {
     return cells[cells.length - 1];
   }
 
+  private key(p: XYZ): string {
+    return `${p[0]},${p[1]},${p[2]}`;
+  }
+
+  /**
+   * Коридор подхода к пину: от клетки `dust` на `len` клеток в направлении (dx,dz) (первые `inRing` клеток лежат в запретном кольце и
+   * разблокируются), плюс две резервные клетки на конце и по боковой клетке с обеих сторон.
+   */
+  lane(dust: XYZ, dx: number, dz: number, inRing: number, extra = 2): void {
+    const cells: XYZ[] = [];
+    const side: XYZ[] = [];
+    const open: XYZ[] = [];
+    const total = inRing + extra;
+    for (let k = 1; k <= total; k++) {
+      const c: XYZ = [dust[0] + dx * k, dust[1], dust[2] + dz * k];
+      cells.push(c);
+      open.push(c);
+    }
+    for (let k = 0; k <= total; k++) {
+      side.push([dust[0] + dx * k + dz, dust[1], dust[2] + dz * k + dx], [dust[0] + dx * k - dz, dust[1], dust[2] + dz * k - dx]);
+    }
+    this.lanes.set(this.key(dust), { cells, side, open });
+    for (const c of open) this.freeCells.push(c);
+  }
+
   /** Ставит макрос со смещением; возвращает клеммы его выводов (концы ножек) в координатах платы. */
   addMacro(m: Macro, ox: number, oz: number): Map<string, { dust: XYZ; approach: XYZ }> {
     this.base.merge(m.vox, ox, 0, oz);
@@ -81,7 +115,14 @@ export class Board {
       const end = this.stub([1, 2].map((i) => [approach[0] + dx * i, approach[1], approach[2]] as XYZ));
       out.set(name, { dust: end, approach });
     }
-    this.keepOut.push({ x0: b.x0 + ox - 1, z0: b.z0 + oz - 1, x1: b.x1 + ox + 1, z1: b.z1 + oz + 1, y1: b.y1 + 1, free: [] });
+    const R = this.ring;
+    this.keepOut.push({ x0: b.x0 + ox - R, z0: b.z0 + oz - R, x1: b.x1 + ox + R, z1: b.z1 + oz + R, y1: b.y1 + 1, free: [] });
+    for (const [name, p] of m.pins) {
+      const end = out.get(name)!.dust;
+      const dx = p.kind === 'in' ? -1 : 1;
+      // стенка кольца отстоит от макроса на R клеток; ножка занимает первые две
+      this.lane(end, dx, 0, Math.max(0, R - 2));
+    }
     return out;
   }
 
@@ -89,16 +130,28 @@ export class Board {
   addPart(p: Part): Map<string, XYZ> {
     const out = new Map<string, XYZ>();
     for (const [k, pin] of Object.entries(p.pins)) {
-      out.set(k, this.stub(pin.free.length ? pin.free.slice(0, 3) : [pin.dust]));
+      const end = this.stub(pin.free.length ? pin.free.slice(0, 3) : [pin.dust]);
+      out.set(k, end);
+      if (pin.free.length) {
+        const dx = Math.sign(pin.free[0][0] - pin.dust[0]);
+        const dz = Math.sign(pin.free[0][2] - pin.dust[2]);
+        this.lane(end, dx, dz, 0);
+      }
     }
     const b = p.bbox;
-    this.keepOut.push({ x0: b.x0 - 1, z0: b.z0 - 1, x1: b.x1 + 1, z1: b.z1 + 1, y1: b.y1, free: [] });
+    const R = Math.max(1, this.ring - 1);
+    this.keepOut.push({ x0: b.x0 - R, z0: b.z0 - R, x1: b.x1 + R, z1: b.z1 + R, y1: b.y1, free: [] });
     return out;
   }
 
   /** Запрет прокладки в окрестности блока (например, массивы). */
   guard(x0: number, z0: number, x1: number, z1: number, y1: number, free: XYZ[] = []): void {
     this.keepOut.push({ x0, z0, x1, z1, y1, free });
+  }
+
+  /** Клемма массива с коридором подхода наружу (направление dx,dz). */
+  terminal(dust: XYZ, dx: number, dz: number, len = 4): void {
+    this.lane(dust, dx, dz, 0, len);
   }
 
   connect(name: string, from: XYZ, to: XYZ[]): void {
@@ -158,6 +211,13 @@ export class Board {
         }
       }
     }
+    for (const p of this.freeCells) {
+      const gx = p[0] + this.offX;
+      const gz = p[2] + this.offZ;
+      if (gx < 0 || gz < 0 || gx >= this.W || gz >= this.D) continue;
+      const i = g.idx(gx, p[1], gz);
+      if (g.kind[i] === K.Air) g.res[i] &= ~RES_BLOCKED;
+    }
     for (const k of this.keepOut) {
       for (const p of k.free) {
         const gx = p[0] + this.offX;
@@ -170,7 +230,7 @@ export class Board {
     this.g = g;
   }
 
-  route(opts: { maxLevel?: number; maxRun?: number; maxExpansions?: number; rounds?: number } = {}): RouteReport {
+  route(opts: { maxLevel?: number; maxRun?: number; maxExpansions?: number; rounds?: number; spread?: number } = {}): RouteReport {
     const t0 = performance.now();
     let order: number[] | null = null;
     let last: RouteReport = { ok: false, routed: 0, ms: 0 };
@@ -189,7 +249,7 @@ export class Board {
     return last;
   }
 
-  private routeOnce(opts: { maxLevel?: number; maxRun?: number; maxExpansions?: number }, forced: number[] | null): { report: RouteReport; failedId?: number; order?: number[] } {
+  private routeOnce(opts: { maxLevel?: number; maxRun?: number; maxExpansions?: number; spread?: number }, forced: number[] | null): { report: RouteReport; failedId?: number; order?: number[] } {
     const t0 = performance.now();
     this.toGrid();
     const g = this.g;
@@ -216,8 +276,32 @@ export class Board {
       n.to.forEach(label);
       trees.push(makeTree(id, [this.idx(n.from)], n.to.map((p) => [this.idx(p)])));
     });
-    const router = new Router(g, { maxLevel, maxExpansions: opts.maxExpansions ?? 150000 });
-    router.reservePins(trees);
+    const router = new Router(g, { maxLevel, maxExpansions: opts.maxExpansions ?? 150000, spread: opts.spread });
+    this.lastRouter = router;
+    const laneCells = (id: number): number[] => {
+      const n = this.nets[id];
+      const cells: number[] = [];
+      for (const pin of [n.from, ...n.to]) {
+        const ln = this.lanes.get(this.key(pin));
+        if (!ln) continue;
+        // коридор закрыт для чужих проводов на нижних уровнях (опоры мостов ставятся под проводом)
+        for (const [list, top] of [[ln.cells, 3], [ln.side, 2]] as const) {
+          for (const c of list) {
+            const gx = c[0] + this.offX;
+            const gz = c[2] + this.offZ;
+            if (gx < 0 || gz < 0 || gx >= this.W || gz >= this.D) continue;
+            for (let y = c[1]; y <= top; y++) cells.push(g.idx(gx, y, gz));
+          }
+        }
+      }
+      return cells;
+    };
+    const reserve = (t: NetTree): void => {
+      router.reservePins([t]);
+      router.reserveCells(t.id, laneCells(t.id));
+    };
+    const fresh = (id: number): NetTree => makeTree(id, [this.idx(this.nets[id].from)], this.nets[id].to.map((p) => [this.idx(p)]));
+    for (const t of trees) reserve(t);
     const hp = (t: NetTree): number => {
       const r = t.root[0];
       let s = 0;
@@ -226,13 +310,51 @@ export class Board {
     };
     const order = forced ?? [...trees].sort((a, b) => hp(a) - hp(b) || a.id - b.id).map((t) => t.id);
     const byId = new Map(trees.map((t) => [t.id, t]));
+    const queue = [...order];
+    const fails = new Map<number, number>();
+    let rips = 0;
     let routed = 0;
-    for (const id of order) {
+    while (queue.length) {
+      const id = queue.shift()!;
       const t = byId.get(id)!;
-      if (!router.routeNet(t)) return { report: { ok: false, failed: `${this.nets[t.id].name}: ${router.lastFail}`, routed, ms: Math.round(performance.now() - t0) }, failedId: id, order };
-      routed++;
+      const tn = performance.now();
+      const exp0 = router.expansions;
+      if (router.routeNet(t)) {
+        routed++;
+        this.trace?.(`ok ${this.nets[id].name} (${Math.round(performance.now() - tn)} ms, ${router.expansions - exp0} exp)`);
+        continue;
+      }
+      const msg = router.lastFail;
+      this.trace?.(`FAIL ${this.nets[id].name}: ${msg} (${Math.round(performance.now() - tn)} ms, ${router.expansions - exp0} exp)`);
+      // частично проложенное снимаем; мешающие провода рядом с выводами тоже — и кладём их заново после этой сети
+      router.ripUp(id);
+      const n = (fails.get(id) ?? 0) + 1;
+      fails.set(id, n);
+      const blockers = new Set<number>();
+      for (const pin of [this.nets[id].from, ...this.nets[id].to]) {
+        const i = this.idx(pin);
+        for (const b of router.netsNear(g.x(i), g.z(i), 5, id)) blockers.add(b);
+      }
+      if (blockers.size === 0 || n > 5 || rips > 120) {
+        return { report: { ok: false, failed: `${this.nets[id].name}: ${msg}`, routed, ms: Math.round(performance.now() - t0) }, failedId: id, order };
+      }
+      this.trace?.(`  rip: ${[...blockers].map((b) => this.nets[b].name).join(', ')}`);
+      for (const b of blockers) {
+        router.ripUp(b);
+        const ft = fresh(b);
+        byId.set(b, ft);
+        reserve(ft);
+        routed--;
+        rips++;
+        const k = queue.indexOf(b);
+        if (k >= 0) queue.splice(k, 1);
+      }
+      const ft = fresh(id);
+      byId.set(id, ft);
+      reserve(ft);
+      queue.unshift(id, ...blockers);
     }
-    for (const t of trees) {
+    for (const t of byId.values()) {
       if (!insertRepeaters(g, t, opts.maxRun ?? 12)) return { report: { ok: false, failed: `повторители в сети ${this.nets[t.id].name}`, routed, ms: Math.round(performance.now() - t0) } };
     }
     return { report: { ok: true, routed, ms: Math.round(performance.now() - t0) } };
