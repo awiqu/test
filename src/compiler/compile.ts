@@ -33,6 +33,8 @@ export interface ExportSettings {
   variants: VariantChoice;
   dataVersion: number;
   verify: boolean;
+  /** Все входы слева, а все выходы — в последнем столбце (для макросов процессора). */
+  edgePins?: boolean;
 }
 
 export function defaultSettings(): ExportSettings {
@@ -208,7 +210,7 @@ function stamp(nl: Netlist, defs: ModuleDef[], layout: Layout, settings: ExportS
 export function tryLayout(nl: Netlist, settings: ExportSettings, gapX: number, gapZ: number, seed: number): { ok: boolean; attempt?: Attempt; reason?: string; router?: Router; failedTree?: NetTree } {
   const modOpts = (inst: { delay: number }): ModuleOptions => ({ inputDevice: settings.inputDevice, delay: inst.delay });
   const defs = nl.insts.map((inst) => getModule(inst.kind, inst.k, modOpts(inst)));
-  const layout = layoutModules(nl, defs, gapX, gapZ, seed);
+  const layout = layoutModules(nl, defs, gapX, gapZ, seed, settings.edgePins === true);
   let order: number[] | null = null;
   let lastReason = '';
   let lastFailure: { attempt?: Attempt; router?: Router; failedTree?: NetTree } = {};

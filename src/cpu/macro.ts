@@ -69,6 +69,7 @@ export function structureToVox(st: Structure): Vox {
 export function macroSettings(over: Partial<ExportSettings> = {}): ExportSettings {
   const s = defaultSettings();
   s.floorPlate = true;
+  s.edgePins = true;
   s.wireBlock = WIRE_MARK;
   s.gateBlock = GATE_MARK;
   return { ...s, ...over };

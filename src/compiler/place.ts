@@ -41,7 +41,7 @@ function isotonic(y: number[]): number[] {
   return out;
 }
 
-export function layoutModules(nl: Netlist, defs: ModuleDef[], gapX: number, gapZ: number, seed: number): Layout {
+export function layoutModules(nl: Netlist, defs: ModuleDef[], gapX: number, gapZ: number, seed: number, edgePins = false): Layout {
   const n = nl.insts.length;
   const rnd = mulberry(seed + 1);
   const dims = defs.map((d) => ({ w: d.box.x1 - d.box.x0 + 1, d: d.box.z1 - d.box.z0 + 1 }));
@@ -50,6 +50,11 @@ export function layoutModules(nl: Netlist, defs: ModuleDef[], gapX: number, gapZ
   for (const inst of nl.insts) {
     if (inst.kind === 'IN') depthOf[inst.id] = 0;
     else depthOf[inst.id] = 1 + Math.max(...inst.ins.map((net) => depthOf[nl.nets[net].driver]));
+  }
+  if (edgePins) {
+    // все выходы — в последнем столбце (макросы подключаются к платам с краёв)
+    const top = Math.max(0, ...nl.insts.filter((i) => i.kind !== 'OUT').map((i) => depthOf[i.id])) + 1;
+    for (const inst of nl.insts) if (inst.kind === 'OUT') depthOf[inst.id] = top;
   }
   const maxDepth = Math.max(0, ...depthOf);
   const cols: number[][] = [];

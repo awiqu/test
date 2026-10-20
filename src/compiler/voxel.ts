@@ -92,5 +92,5 @@ export function isConductor(k: K): boolean {
 
 /** Источник сигнала, к которому пыль «присоединяется» сбоку. */
 export function isSignalSource(k: K): boolean {
-  return k === K.Torch || k === K.Lever || k === K.Button;
+  return k === K.Torch || k === K.Lever || k === K.Button || k === K.Comparator;
 }
