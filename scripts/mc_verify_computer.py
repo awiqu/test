@@ -150,6 +150,15 @@ def main():
         lever(ex['clk'], False)
         sprint(r, half)
 
+    # Начальное состояние ОЗУ и портов после вставки схемы не определено (как у настоящей памяти при включении):
+    # расставляем нули, как это предполагает эмулятор (повторители-защёлки выключаем).
+    for rcells in ex['ram'].values():
+        for pos in rcells:
+            b = by_pos[tuple(pos)]
+            props = dict(b[4])
+            props['powered'] = 'false'
+            r.cmd(f'setblock {OX + pos[0]} {OY + pos[1]} {OZ + pos[2]} {state_str(b[3], props)}')
+    sprint(r, 200)
     t0 = time.time()
     lever(ex['reset'], True)
     sprint(r, max(800, half))
@@ -171,10 +180,10 @@ def main():
             if m is not None:
                 ram[int(m)] = bits(cells, rep_on)
         errs = []
-        for r, cells in ex.get('regs', {}).items():
-            got = bits(cells, dust_on)
-            if got != step['regs'][int(r)]:
-                errs.append(f'R{r} {got} != {step["regs"][int(r)]}')
+        for rk, rcells in ex.get('regs', {}).items():
+            got = bits(rcells, dust_on)
+            if got != step['regs'][int(rk)]:
+                errs.append(f'R{rk} {got} != {step["regs"][int(rk)]}')
         if pc != step['pc']:
             errs.append(f'PC {pc} != {step["pc"]}')
         if ex['a'] and a != step['a']:

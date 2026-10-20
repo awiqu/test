@@ -109,6 +109,12 @@ export function BuildStep() {
               </div>
               <small className="dim">{MODES.find((m) => m.id === settings.mode)?.desc}</small>
             </div>
+            {plan?.ok && plan.feat.regs && (
+              <div className="badge warn">
+                Регистровая машина: на каждый бит каждого регистра — триггер, плюс файл регистров с двумя портами чтения. Плата в 2–5 раз больше аккумуляторной (сотни тысяч блоков),
+                постройка и проверка занимают несколько минут. Режим «под программу» строит только регистры, в которые программа пишет.
+              </div>
+            )}
             {planErrors.map((i, k) => <div key={k} className="badge bad">{i.message}</div>)}
             {planWarns.map((i, k) => <div key={k} className="badge warn">{i.message}</div>)}
             {plan?.ok && (
