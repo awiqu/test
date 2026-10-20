@@ -410,7 +410,7 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
   let floorStats: FloorStats | undefined;
 
   const compactLayout = (): { rom: RomLayout; stats: FloorStats } => {
-    const ESC = process.env.FLOOR_ESC ? Number(process.env.FLOOR_ESC) : 8; // поле под выходы выводов (плоский участок + рампа в 5 уровней)
+    const ESC = 8; // поле под выходы выводов (плоский участок + рампа в 5 уровней)
     const dryRun = <T,>(fn: () => T): T => {
       const real = v;
       v = new Vox();
@@ -451,13 +451,6 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
       romDry.addrX.forEach((x, b) => pins.push({ key: `rom|addr|${b}`, x, z: romDry.addrBottom }));
       romDry.outX.forEach((x, j) => pins.push({ key: `rom|out|${j}`, x, z: romDry.outBottom }));
       drys.push({ name: 'rom', rect: { x0: romDry.bounds.x0 - 2, x1: romDry.bounds.x1 + 2, z0: romDry.bounds.z0 - 2, z1: romDry.bounds.z1 + 8 }, pins });
-    }
-    if (process.env.FLOOR_DEBUG) {
-      for (const d of drys) {
-        const zs = d.pins.filter((q) => !q.key.startsWith('rom')).map((q) => q.z - d.rect.z0);
-        const xs = d.pins.filter((q) => q.key.startsWith('rom')).map((q) => q.x - d.rect.x0);
-        process.stderr.write(`${d.name}: w=${d.rect.x1 - d.rect.x0 + 1} h=${d.rect.z1 - d.rect.z0 + 1} zpar=${zs.map((z) => z & 1).join('')} z=${zs.join(',')} x=${xs.join(',')}\n`);
-      }
     }
     const pinKeyOf = (card: string, side: 'east' | 'west', pin: string): string => `${card}|${side}|${pin}`;
     const cardIdx = new Map(drys.map((d, i) => [d.name, i]));
@@ -506,14 +499,13 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     for (let attempt = 0; attempt < 3; attempt++) {
       progress(`Расстановка узлов${attempt ? ` (попытка ${attempt + 1})` : ''}…`);
       // несколько стартов отжига: берём самую плотную расстановку (площадь + связи)
-      const starts = process.env.FLOOR_STARTS ? Number(process.env.FLOOR_STARTS) : 6;
+      const starts = 6;
       let pr = placeCards(pcs, placeNets, { seed: 7 + attempt * 13, gap: 1 + attempt, bboxWeight: 4 });
       const score = (r: typeof pr): number => r.width * r.height + 3 * r.wire + (r.overlap > 0 ? 1e9 : 0);
       for (let k = 1; k < starts; k++) {
         const cand = placeCards(pcs, placeNets, { seed: 7 + attempt * 13 + k * 101, gap: 1 + attempt, bboxWeight: 4 });
         if (score(cand) < score(pr)) pr = cand;
       }
-      if (process.env.FLOOR_DEBUG) process.stderr.write(`PLACE ${pr.width}x${pr.height} wire=${Math.round(pr.wire)} overlap=${pr.overlap} sumArea=${pcs.reduce((a, c) => a + c.w * c.h, 0)}\n`);
       // реальная расстановка
       v = new Vox();
       cardMap.clear();
@@ -547,13 +539,6 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
         progress('Прокладка проводов поверх узлов…');
         const stats = routeFloor(v, fnets, { layers: 3, progress, seed: attempt + 1 });
         const shorts = findShorts(v);
-        if (process.env.FLOOR_DEBUG) {
-          const ign = new Set<string>();
-          for (const n of fnets) for (const q of [n.src, ...n.sinks]) ign.add(`${q.x},${q.y},${q.z}`);
-          const contacts = findShorts(v, { cards: true, ignore: ign }).filter((q) => q.nets.includes('(карточка)'));
-          process.stderr.write(`CONTACTS ${contacts.length}\n`);
-          for (const q of contacts.slice(0, 12)) process.stderr.write(`  ${q.nets.join(' × ')} at ${q.at.join(',')}\n`);
-        }
         if (shorts.length) throw new FloorError(`короткое замыкание цепей: ${shorts.slice(0, 3).map((x) => x.nets.join(' × ')).join('; ')}`, []);
         return { rom: rom2, stats };
       } catch (e) {

@@ -10,8 +10,6 @@ import { Vox } from './vox';
  * повторителем). Один узел принадлежит одной цепи; перекрещиваются цепи только на разных слоях.
  */
 
-export const floorDebug: { edges: { net: string; from: [number, number, number]; to: [number, number, number]; kind: string; strength: number }[] } = { edges: [] };
-
 export const LAYER0_Y = 6;
 export const layerY = (l: number): number => LAYER0_Y + 2 * l;
 
@@ -231,7 +229,6 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
 
 function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, attempts: number): FloorStats {
   const t0 = performance.now();
-  floorDebug.edges.length = 0;
   // границы и высоты карточек
   const bb = v.bounds();
   const pad = 20;
@@ -280,28 +277,6 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
         if (c.y < LAYER0_Y) claims.set(key(c.x, c.y + 1, c.z), netIdx);
       }
       return e;
-    }
-    if (process.env.FLOOR_DEBUG) {
-      const why = new Map<string, number>();
-      for (const e of variants) {
-        for (const c of e.cells) {
-          if (cardCells.has(key(c.x, c.y, c.z))) { why.set('card', (why.get('card') ?? 0) + 1); break; }
-          if (cardCells.has(key(c.x, c.y - 1, c.z))) { why.set('cardBelow', (why.get('cardBelow') ?? 0) + 1); break; }
-          let bad = false;
-          for (const [dx, dy, dz] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]] as [number, number, number][]) {
-            const o = claims.get(key(c.x + dx, c.y + dy, c.z + dz));
-            if (o !== undefined && o !== netIdx) bad = true;
-          }
-          if (bad) { why.set('claim', (why.get('claim') ?? 0) + 1); break; }
-        }
-      }
-      const near: string[] = [];
-      for (const [k, o] of claims) {
-        const [x, y, z] = k.split(',').map(Number);
-        if (Math.abs(x - pin.x) <= 12 && Math.abs(z - pin.z) <= 4 && y === pin.y) near.push(`${x},${z}:#${o}`);
-      }
-      process.stderr.write(`near claims ${near.join(' ')}\n`);
-      process.stderr.write(`ESC FAIL ${role} pin=${JSON.stringify(pin)} variants=${variants.length} why=${JSON.stringify([...why])}\n`);
     }
     throw new FloorError(`Нет места для выхода вывода (${pin.x}, ${pin.y}, ${pin.z}) цепи #${netIdx}`, []);
   };
@@ -760,7 +735,6 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
           const dz = Math.sign(nodeZ(jj(hi)) - nodeZ(jj(lo)));
           const lx = nodeX(ii(lo));
           const lz = nodeZ(jj(lo));
-          if (process.env.FLOOR_DEBUG) floorDebug.edges.push({ net: s.net.name, from: [x0, layerY(l), z0], to: [x1, layerY(li(c)), z1], kind: 'via', strength });
           v.solid(lx + dx, y0, lz + dz); // середина ребра нижнего слоя — опора рампы
           v.dust(lx + dx, y0 + 1, lz + dz);
           wireCells += 1;
@@ -777,7 +751,6 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
         if (strength <= 9 || strength - 2 < cs) {
           const dx = x1 - x0;
           const dz = z1 - z0;
-          if (process.env.FLOOR_DEBUG) floorDebug.edges.push({ net: s.net.name, from: [x0, y, z0], to: [x1, y, z1], kind: 'rep', strength });
           v.repeater(mx, y, mz, SIDE(-Math.sign(dx), -Math.sign(dz)), 1);
           repeaters++;
           s2 = 15;
@@ -785,10 +758,6 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
           walk(c, 15);
           continue;
         }
-        if (process.env.FLOOR_DEBUG && v.get(mx, y, mz)) {
-          process.stderr.write(`COLLIDE net=${s.net.name} cell=(${mx},${y},${mz}) existing owner=${v.ownerOf(mx, y, mz)} kind=${v.get(mx, y, mz)!.kind} nodes (${x0},${z0},l${l})->(${x1},${z1})\n`);
-        }
-        if (process.env.FLOOR_DEBUG) floorDebug.edges.push({ net: s.net.name, from: [x0, y, z0], to: [x1, y, z1], kind: 'flat', strength });
         v.dust(mx, y, mz);
         wireCells++;
         s2 = strength - 2;
