@@ -422,6 +422,10 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
     for (const s of states) for (const e of [s.srcEsc, ...s.sinkEsc]) isTerm[termNode(e)] = 1;
     const netEdges: number[][] = states.map(() => []);
     const netShadows: number[][] = states.map(() => []);
+    // колонки середин рёбер, занятые рампами: рампы соседних слоёв над одним ребром мешают друг другу (опора верхней запирает пыль нижней)
+    const viaMask = new Map<number, number>();
+    const netViaCols: [number, number][][] = states.map(() => []);
+    const colKeyOf = (mx: number, mz: number): number => (mz - Z0) * 100003 + (mx - X0);
     const ripCount = new Int32Array(states.length);
     const RIP_MAX = 6;
     const STEAL_COST = 30;
@@ -435,6 +439,12 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
       for (const sh of netShadows[s.idx]) if (owner[sh] === SHADOW) owner[sh] = FREE;
       netEdges[s.idx] = [];
       netShadows[s.idx] = [];
+      for (const [ck, l0] of netViaCols[s.idx]) {
+        const m = (viaMask.get(ck) ?? 0) & ~(1 << l0);
+        if (m) viaMask.set(ck, m);
+        else viaMask.delete(ck);
+      }
+      netViaCols[s.idx] = [];
       s.parent.clear();
       s.viaTo.clear();
       failedBy.delete(s.idx);
@@ -509,6 +519,8 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
           if (usedEdge.has(edgeKey(lo, lowEdge)) && !(steal && (foreign(lo) || foreign(lowEdge)))) return false;
           const [mx, mz] = midCol(l0, lo, lowEdge);
           const y0 = layerY(l0);
+          const vm = viaMask.get(colKeyOf(mx, mz)) ?? 0;
+          if (vm & ((1 << (l0 + 1)) | (l0 > 0 ? 1 << (l0 - 1) : 0))) return false;
           // клетки рампы: серединная опора на уровне нижнего слоя и пыль на уровень выше; над нижним узлом должно быть пусто
           if (colTop(mx, mz) > y0 - 3 || !quietAround(mx, mz, y0 + 1)) return false;
           if (claims.has(key(mx, y0, mz)) || claims.has(key(mx, y0 + 1, mz))) return false;
@@ -585,6 +597,7 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
         // самопересечение: ребро нижнего слоя одновременно проводом и опорой рампы, либо узел пути стоит над нижним узлом рампы
         const flat = new Set<number>();
         const viaEdges = new Map<number, number>();
+        const chainCols = new Map<number, number>();
         const chainSet = new Set(chain);
         const bad: number[] = [];
         const victimSet = new Set<number>();
@@ -603,6 +616,11 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
           const ek = edgeKey(lo, lowEdge);
           const shadow = NI(l0 + 1, ii(lo), jj(lo));
           if (owner[shadow] >= 0 && owner[shadow] !== s.idx) victimSet.add(owner[shadow]);
+          const [cmx, cmz] = midCol(l0, lo, lowEdge);
+          const ck = colKeyOf(cmx, cmz);
+          const prevBits = chainCols.get(ck) ?? 0;
+          if (prevBits & ((1 << (l0 + 1)) | (l0 > 0 ? 1 << (l0 - 1) : 0))) bad.push(lo * total + hi);
+          chainCols.set(ck, prevBits | (1 << l0));
           if (viaEdges.has(ek) || chainSet.has(shadow)) bad.push(lo * total + hi);
           viaEdges.set(ek, lo * total + hi);
         }
@@ -633,6 +651,10 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
             const shadow = NI(l0 + 1, ii(lo), jj(lo));
             owner[shadow] = SHADOW;
             netShadows[s.idx].push(shadow);
+            const [cmx, cmz] = midCol(l0, lo, lowEdge);
+            const ck = colKeyOf(cmx, cmz);
+            viaMask.set(ck, (viaMask.get(ck) ?? 0) | (1 << l0));
+            netViaCols[s.idx].push([ck, l0]);
           } else {
             const ek = edgeKey(a, b);
             usedEdge.add(ek);

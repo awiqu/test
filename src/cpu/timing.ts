@@ -1,6 +1,7 @@
 import { Built, BuildSettings, buildComputer } from './computer';
 import { Plan } from './plan';
 import { TickSim } from './tick';
+import { K } from '../compiler/voxel';
 
 /** Результат замера фаз замков триггеров на готовой плате (игровые тики, 1 тик редстоуна = 2). */
 export interface LockTiming {
@@ -34,7 +35,7 @@ export function recommendedHalfPeriod(t: LockTiming): number {
  * поэтому замер не зависит от программы. Работа триггера «ведущий-ведомый» корректна, если ведомый успевает закрыться до того, как откроется
  * ведущий (и наоборот), — на каждой карточке и между разными карточками.
  */
-export function measureLockTiming(built: Built, sim: TickSim = new TickSim(built.vox)): LockTiming {
+export function measureLockTiming(built: Built, sim: TickSim = new TickSim(built.vox), broken?: Set<string>): LockTiming {
   const pr = built.probes;
   if (!pr.clk) throw new Error('Замер замков требует рычага CLK (выберите тактирование «рычаг»)');
   sim.settle(100000);
@@ -65,7 +66,10 @@ export function measureLockTiming(built: Built, sim: TickSim = new TickSim(built
   sim.run(2500);
   const fall = edge(false, 1500);
   sim.run(1000);
+  if (broken) for (const n of brokenNets(built, sim)) broken.add(n);
   const rise = edge(true, 1500);
+  sim.run(1000);
+  if (broken) for (const n of brokenNets(built, sim)) broken.add(n);
   const timeOf = (m: Map<(typeof pins)[number], number>, kind: 'S' | 'M'): Map<string, number> => {
     const r = new Map<string, number>();
     for (const [p, t] of m) if (p.kind === kind) r.set(p.id, t);
@@ -96,6 +100,24 @@ export function measureLockTiming(built: Built, sim: TickSim = new TickSim(built
   };
 }
 
+/**
+ * Самопроверка проводки: все клетки пыли одной цепи в установившемся состоянии должны быть либо под напряжением, либо нет.
+ * Цепь, у которой часть пыли горит, а часть нет, — разрыв (или чужое касание) в разводке. Возвращает имена таких цепей.
+ */
+export function brokenNets(built: Built, sim: TickSim): string[] {
+  const v = built.vox;
+  const stat = new Map<string, { on: number; off: number }>();
+  v.forEach((x, y, z, c) => {
+    const o = v.ownerOf(x, y, z);
+    if (!o || c.kind !== K.Dust) return;
+    const e = stat.get(o) ?? { on: 0, off: 0 };
+    if (sim.powerAt(x, y, z) > 0) e.on++;
+    else e.off++;
+    stat.set(o, e);
+  });
+  return [...stat].filter(([, e]) => e.on > 0 && e.off > 0).map(([n]) => n);
+}
+
 export interface TimedBuild {
   built: Built;
   timing: LockTiming;
@@ -116,8 +138,14 @@ export function buildTimed(plan: Plan, st: BuildSettings, progress: (msg: string
   for (let passes = 1; ; passes++) {
     const probe = buildComputer(plan, { ...st, guardRt, clock: 'lever' }, progress);
     progress('Замер фаз замков…');
-    const timing = measureLockTiming(probe);
+    const broken = new Set<string>();
+    const timing = measureLockTiming(probe, new TickSim(probe.vox), broken);
+    if (broken.size > 0 && st.layout !== 'stack') {
+      progress(`Самопроверка проводки: разрыв в цепях ${[...broken].slice(0, 6).join(', ')} — строю раскладку колонкой`);
+      return buildTimed(plan, { ...st, layout: 'stack' }, progress);
+    }
     const worst = Math.min(timing.fall, timing.rise);
+    if (!Number.isFinite(worst)) throw new Error('Замер фаз замков не удался: замки не меняются при переключении CLK (разрыв в тактовой цепи)');
     if (worst >= MIN_LOCK_MARGIN || passes >= 4) {
       const halfPeriod = recommendedHalfPeriod(timing);
       const clockHalfTicks = st.clockHalfTicks > 0 ? st.clockHalfTicks : halfPeriod;
