@@ -21,10 +21,14 @@ export interface RomOptions {
 }
 
 export interface RomLayout {
-  /** Клемма (пыль на земле) прямой линии адреса каждого бита: addr[бит][0]; обратная линия строится внутри факелом. */
-  addr: XYZ[][];
-  /** Нижняя клетка каждой линии столбца (выход ПЗУ). */
-  out: XYZ[];
+  /** x прямой линии адреса каждого бита. Линия входит снизу (магистраль шины продолжает её), обратная получается факелом сверху. */
+  addrX: number[];
+  /** Нижняя строка линий адреса (магистраль шины начинается строкой ниже). */
+  addrBottom: number;
+  /** x линии каждого столбца выхода (идёт на юг; шина продолжает её). */
+  outX: number[];
+  /** Нижняя строка линий столбцов (шина начинается строкой ниже). */
+  outBottom: number;
   /** z ряда компараторов каждого слова. */
   rowZ: number[];
   /** x бочек каждого столбца. */
@@ -107,6 +111,24 @@ export function addressPair(v: Vox, xd: number, zTop: number, zTap0: number, zLa
 }
 
 /**
+ * Пара линий адреса со входом снизу: прямая линия течёт на север, факел-инвертор над её верхним концом даёт обратную линию,
+ * которая течёт на юг. Нижний конец прямой линии — вход (шина продолжает линию вниз).
+ */
+export function addressPairN(v: Vox, xd: number, zTap0: number, zLast: number, free: (z: number) => boolean): void {
+  const xi = xd + LINE_PITCH;
+  // над первой строкой отводов — ещё клетка линии без отводов, иначе верхняя пыль превращается в угол и перестаёт питать блок инвертора
+  const zInv = zTap0 - 2;
+  elevatedLine(v, xd, zTap0 - 1, zLast, 'N', free);
+  v.set(xd, 3, zInv, { kind: K.Solid, mat: 0 });
+  v.torch(xd + 1, 3, zInv, 3);
+  for (let x = xd + 2; x <= xi; x++) {
+    v.solid(x, 2, zInv);
+    v.set(x, 3, zInv, { kind: K.Dust });
+  }
+  elevatedLine(v, xi, zInv, zLast, 'S', free);
+}
+
+/**
  * Цепочка «ИЛИ несовпадений»: отводы с приподнятых линий (xs по возрастанию) складываются повторителями вдоль ряда z.
  * Возвращает x, с которого цепочку можно продолжать пылью (выход последнего повторителя).
  */
@@ -139,10 +161,13 @@ export function buildRom(v: Vox, ox: number, oz: number, o: RomOptions): RomLayo
   const freeRows = new Set<number>(rowZ.map((z) => z + 1));
   const free = (z: number): boolean => z < oz || z > zLast || freeRows.has(z);
 
-  // линии адреса: клемма только у прямой линии, обратная получается факелом
-  const addr: XYZ[][] = [];
+  // линии адреса: вход снизу у прямой линии, обратная получается факелом
+  const addrX: number[] = [];
   const lineX = (bit: number, comp: number): number => ox + 2 * LINE_PITCH * bit + LINE_PITCH * comp;
-  for (let b = 0; b < P; b++) addr.push([addressPair(v, lineX(b, 0), oz - EXT, oz, zLast, free)]);
+  for (let b = 0; b < P; b++) {
+    addressPairN(v, lineX(b, 0), oz, zLast, free);
+    addrX.push(lineX(b, 0));
+  }
 
   // ряды
   for (let w = 0; w < rows; w++) {
@@ -175,14 +200,15 @@ export function buildRom(v: Vox, ox: number, oz: number, o: RomOptions): RomLayo
     }
   }
 
-  // столбцы выхода (приподнятые, вдоль Z) с усилителями; выходная клемма снова получает почти полные 15
-  const out: XYZ[] = [];
+  // столбцы выхода (приподнятые, вдоль Z, на юг); дальше их продолжает шина
+  const outX: number[] = [];
+  const outBottom = zLast + 2;
   for (let j = 0; j < cols; j++) {
     const xb = colX[j] + 4;
-    elevatedLine(v, xb, rowZ[0], zLast + EXT, 'S', free, true);
-    out.push(descendBottom(v, xb, zLast + EXT));
+    elevatedLine(v, xb, rowZ[0], outBottom, 'S', free);
+    outX.push(xb);
   }
-  return { addr, out, rowZ, colX, bounds: { x0: ox, x1: xEnd, z0: oz, z1: zLast } };
+  return { addrX, addrBottom: zLast, outX, outBottom, rowZ, colX, bounds: { x0: ox, x1: xEnd, z0: oz - 1, z1: outBottom } };
 }
 
 export { E, S, MAT_GATE };

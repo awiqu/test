@@ -31,7 +31,7 @@ function feat(over: Omit<Partial<Feat>, 'used'> & { used: CtlName[] }): Feat {
 describe('hardware macros compile and behave like their equations', () => {
   it('PC slice', () => {
     for (const hasTake of [true, false]) {
-      const m = compileMacro(pcSliceNetlist(hasTake));
+      const m = compileMacro(pcSliceNetlist(hasTake, false));
       log(`pc slice take=${hasTake}: ${m.stats.gates} gates, ${m.stats.ms} ms, ${m.size.sx}x${m.size.sz}`);
       const ev = evaluator(m);
       for (let mask = 0; mask < 64; mask++) {

@@ -11,7 +11,7 @@ const log = (s: string) => process.stderr.write(s + '\n');
 type XYZ = [number, number, number];
 
 /** Прогоняет построенный компьютер в тиковом симуляторе и сравнивает с эмулятором после каждой инструкции. */
-function compareRun(built: Built, source: string, cycles: number, half: number): string | null {
+function compareRun(built: Built, source: string, cycles: number, high: number, low: number): string | null {
   const project = newProject('acc4');
   const spec = project.spec;
   const asm = assemble(source, spec, project.instructions, project.asm);
@@ -21,15 +21,16 @@ function compareRun(built: Built, source: string, cycles: number, half: number):
   const bits = (cells: XYZ[]) => cells.reduce((a, c, i) => a + ((sim.powerAt(...c) > 0 ? 1 : 0) << i), 0);
   const lever = (p: XYZ, on: boolean) => sim.setLever(...p, on);
   const cycle = () => {
-    lever(pr.clk, true);
-    sim.run(half);
-    lever(pr.clk, false);
-    sim.run(half);
+    lever(pr.clk!, true);
+    sim.run(high);
+    lever(pr.clk!, false);
+    sim.run(low);
   };
   lever(pr.reset, true);
   cycle();
   cycle();
   lever(pr.reset, false);
+  sim.run(1500);
   if (bits(pr.pc) !== 0) return `после сброса PC=${bits(pr.pc)}`;
   const ports = portMap(spec);
   for (let k = 0; k < cycles; k++) {
@@ -61,10 +62,10 @@ describe('physical computer', () => {
     expect(plan.ok).toBe(true);
     const t0 = performance.now();
     const b = buildComputer(plan, defaultBuildSettings(), (msg) => log(`  ${Math.round(performance.now() - t0)} ms: ${msg}`));
-    log('built: ' + JSON.stringify(b.report));
+    log('built: ' + JSON.stringify(b.stats));
     const bnd = b.vox.bounds();
     log(`bounds ${JSON.stringify(bnd)} blocks ${b.vox.size}`);
-    const err = compareRun(b, prog.source, 40, 600);
+    const err = compareRun(b, prog.source, 40, 2000, 700);
     expect(err).toBeNull();
   }, 3600000);
 });

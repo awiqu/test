@@ -60,10 +60,10 @@ cw2 = BUF(cw1, delay=4)
 w = NOR(nclk, cw2)
 nreset = NOT(reset)
 hh = AND(halt, nreset)
-lkMA = OR(lkM, nweA)
-lkMF = OR(lkM, nweF)
+lkMA = OR(lkM, nweA, reset)
+lkMF = OR(lkM, nweF, reset)
 lkMP = OR(lkM, hh)
-wm = AND(w, weM)
+wm = AND(w, weM, nreset)
 nwm = NOT(wm)
 output lkMA = lkMA
 output lkMF = lkMF
@@ -74,12 +74,17 @@ output nreset = nreset
 `;
 }
 
-/** Разряд счётчика команд: следующее значение = reset ? 0 : take ? операнд : pc + 1 (перенос c — от младшего). */
-export function pcSliceNetlist(hasTake: boolean): string {
-  const L = ['# Разряд счётчика команд', `input pc ob c nreset${hasTake ? ' take ntake' : ''}`, 's = XOR(pc, c)'];
+/**
+ * Разряд счётчика команд: следующее значение = reset ? 0 : take ? операнд : pc + 1 (перенос c — от младшего).
+ * У младшего разряда переноса нет: прибавляется единица, поэтому s = ¬pc, а перенос дальше равен самому pc.
+ */
+export function pcSliceNetlist(hasTake: boolean, first: boolean): string {
+  const L = ['# Разряд счётчика команд', `input pc ob${first ? '' : ' c'} nreset${hasTake ? ' take ntake' : ''}`];
+  if (first) L.push('s = NOT(pc)', 'co = BUF(pc)');
+  else L.push('s = XOR(pc, c)', 'co = AND(c, pc)');
   if (hasTake) L.push('a = AND(take, ob)', 'b = AND(ntake, s)', 'm = OR(a, b)', 'd = AND(nreset, m)');
   else L.push('d = AND(nreset, s)');
-  L.push('co = AND(c, pc)', 'output d = d', 'output co = co');
+  L.push('output d = d', 'output co = co');
   return L.join('\n') + '\n';
 }
 
