@@ -110,7 +110,7 @@ export function buildLitematic(structure: Structure, opts: LitematicOptions): Ui
     }),
     Regions: nbt.compound({ [opts.regionName ?? opts.name]: region }),
   };
-  return gzipSync(writeNbt(root), { level: 9 });
+  return gzipSync(writeNbt(root), { level: 9, mtime: 0 });
 }
 
 export function litematicFromSettings(structure: Structure, s: ExportSettings): Uint8Array {
