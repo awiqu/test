@@ -334,3 +334,17 @@
 .cs-hw-list .cs-card em { color: var(--muted); font-size: 12px; font-style: normal; }
 .cs-hw-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 @media (max-width: 1100px) { .cs-hw { grid-template-columns: 1fr; } .cs-hw-list { position: static; } }
+
+/* ── Постройка ПК ── */
+.cs-containers { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; }
+.cs-cont b { font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-cont { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 2px; padding: 7px 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: inherit; cursor: pointer; font: inherit; }
+.cs-cont small { color: var(--muted); font-size: 11px; }
+.cs-cont:hover { border-color: var(--accent); }
+.cs-cont.on { border-color: var(--accent); background: rgba(77, 163, 255, 0.14); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cs-cont:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cs-guide { margin: 0; padding: 14px 16px; overflow: auto; max-height: 560px; white-space: pre-wrap; font-size: 12px; line-height: 1.5; }
+.cs-board { position: relative; width: 100%; height: 520px; color: var(--text, #ddd); }
+.cs-board canvas { display: block; }
+.cs-board-legend { position: absolute; left: 10px; bottom: 8px; display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 4px 8px; }
+.cs-board-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; }

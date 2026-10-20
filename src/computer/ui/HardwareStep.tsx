@@ -105,7 +105,7 @@ export function HardwareStep() {
         </div>
       </div>
       <div className="cs-footer">
-        <button className="btn" onClick={() => setStep('rom')}>← ПЗУ из бочек</button>
+        <button className="btn" onClick={() => setStep('build')}>← Постройка ПК</button>
         <div className="tb-spacer" />
         <button className="btn primary big" onClick={() => setStep('ai')}>Далее: ИИ и документация →</button>
       </div>

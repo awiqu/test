@@ -8,6 +8,7 @@ import { Built, BuildSettings, defaultBuildSettings } from '../../src/cpu/comput
 import { buildTimed } from '../../src/cpu/timing';
 import { TickSim } from '../../src/cpu/tick';
 import { richProject } from './richProject';
+import { macroSettings } from '../../src/cpu/macro';
 
 const log = (s: string) => process.stderr.write(s + '\n');
 type XYZ = [number, number, number];
@@ -94,6 +95,12 @@ describe('physical computer = emulator (tick simulator)', () => {
   it('acc4 sum of switches (input port, LEDS and SEG outputs)', () => {
     const p = newProject('acc4');
     expect(physicalVsEmulator(p, p.programs[1].source, { cycles: 16, switches: 0b0101 })).toBeNull();
+  }, 1800000);
+
+  it('alternative gate variants (OR/AND/NOR/XOR implementations) still compute correctly', () => {
+    const p = newProject('acc4');
+    const macro = macroSettings({ variants: { OR: 'nor-not', AND: 'merge-not', NOR: 'merge-not', XOR: 'and-or' } });
+    expect(physicalVsEmulator(p, p.programs[1].source, { cycles: 14, switches: 0b0110, settings: { macro } })).toBeNull();
   }, 1800000);
 
   it('richer ISA: arithmetic, logic, shifts, flags and jumps', () => {

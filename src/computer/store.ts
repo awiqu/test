@@ -4,8 +4,9 @@ import { SpecPreset, defaultSpec, validateSpec } from './spec';
 import { buildPresetIsa } from './isa';
 import { newProject, parseComputer, programId } from './project';
 import { DEFAULT_ROM_OPTIONS, RomOptions } from './rom';
+import { ComputerExportSettings, defaultExportSettings } from '../cpu/computerExport';
 
-export type Step = 'spec' | 'isa' | 'asm' | 'prog' | 'rom' | 'hw' | 'ai';
+export type Step = 'spec' | 'isa' | 'asm' | 'prog' | 'rom' | 'build' | 'hw' | 'ai';
 
 export const STEPS: { id: Step; title: string; hint: string }[] = [
   { id: 'spec', title: 'Характеристики', hint: 'Разрядность, память, устройства' },
@@ -13,6 +14,7 @@ export const STEPS: { id: Step; title: string; hint: string }[] = [
   { id: 'asm', title: 'Ассемблер', hint: 'Синтаксис и Python-версия' },
   { id: 'prog', title: 'Программы', hint: 'Редактор и симулятор' },
   { id: 'rom', title: 'ПЗУ из бочек', hint: 'Экспорт в .litematic' },
+  { id: 'build', title: 'Постройка ПК', hint: 'Готовый компьютер в .litematic' },
   { id: 'hw', title: 'Аппаратура', hint: 'Схемы узлов процессора' },
   { id: 'ai', title: 'ИИ и документация', hint: 'Доки, промпты, импорт' },
 ];
@@ -27,6 +29,7 @@ interface Saved {
   isaSeen: boolean;
   activeProgram: string;
   romOptions: RomOptions;
+  buildSettings: ComputerExportSettings;
 }
 
 function loadSaved(): Saved | null {
@@ -59,6 +62,7 @@ interface ComputerState extends Saved {
   setPython: (src: string | undefined) => void;
   setAsm: (patch: Partial<ComputerProject['asm']>) => void;
   setRomOptions: (patch: Partial<RomOptions>) => void;
+  setBuildSettings: (patch: Partial<ComputerExportSettings>) => void;
   markWelcomed: () => void;
   markIsaSeen: () => void;
   setImportText: (t: string) => void;
@@ -71,11 +75,12 @@ const initial = (): Saved => {
     return {
       ...saved,
       romOptions: { ...DEFAULT_ROM_OPTIONS, ...saved.romOptions },
+      buildSettings: { ...defaultExportSettings(), ...saved.buildSettings },
       activeProgram: saved.project.programs.some((p) => p.id === saved.activeProgram) ? saved.activeProgram : saved.project.programs[0]?.id ?? '',
     };
   }
   const project = newProject('risc8');
-  return { project, step: 'spec', welcomed: false, isaCustom: false, isaSeen: false, activeProgram: project.programs[0]?.id ?? '', romOptions: { ...DEFAULT_ROM_OPTIONS } };
+  return { project, step: 'spec', welcomed: false, isaCustom: false, isaSeen: false, activeProgram: project.programs[0]?.id ?? '', romOptions: { ...DEFAULT_ROM_OPTIONS }, buildSettings: defaultExportSettings() };
 };
 
 /** Подгоняет зависимые поля характеристик, чтобы форма не создавала заведомо неверных значений. */
@@ -128,12 +133,13 @@ export const useComputer = create<ComputerState>((set, get) => ({
   setPython: (src) => set((s) => ({ project: { ...s.project, pythonAssembler: src } })),
   setAsm: (patch) => set((s) => ({ project: { ...s.project, asm: { ...s.project.asm, ...patch } } })),
   setRomOptions: (patch) => set((s) => ({ romOptions: { ...s.romOptions, ...patch } })),
+  setBuildSettings: (patch) => set((s) => ({ buildSettings: { ...s.buildSettings, ...patch } })),
   markWelcomed: () => set({ welcomed: true }),
   markIsaSeen: () => set({ isaSeen: true }),
   setImportText: (importText) => set({ importText }),
   reset: (preset = 'risc8') => {
     const p = newProject(preset);
-    set({ project: p, step: 'spec', welcomed: false, isaCustom: false, isaSeen: false, activeProgram: p.programs[0]?.id ?? '', romOptions: { ...DEFAULT_ROM_OPTIONS } });
+    set({ project: p, step: 'spec', welcomed: false, isaCustom: false, isaSeen: false, activeProgram: p.programs[0]?.id ?? '', romOptions: { ...DEFAULT_ROM_OPTIONS }, buildSettings: defaultExportSettings() });
   },
 }));
 
@@ -141,9 +147,9 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 useComputer.subscribe((s) => {
   clearTimeout(timer);
   timer = setTimeout(() => {
-    const { project, step, welcomed, isaCustom, isaSeen, activeProgram, romOptions } = s;
+    const { project, step, welcomed, isaCustom, isaSeen, activeProgram, romOptions, buildSettings } = s;
     try {
-      localStorage.setItem(KEY, JSON.stringify({ project, step, welcomed, isaCustom, isaSeen, activeProgram, romOptions } satisfies Saved));
+      localStorage.setItem(KEY, JSON.stringify({ project, step, welcomed, isaCustom, isaSeen, activeProgram, romOptions, buildSettings } satisfies Saved));
     } catch {
       /* хранилище недоступно — автосохранение пропускаем */
     }
