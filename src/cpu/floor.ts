@@ -378,29 +378,51 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
         if (NL > 1 && owner[t + W * H] === FREE) owner[t + W * H] = -10 - s.idx;
       }
     }
-    const failed: string[] = [];
+    const failedBy = new Map<number, string[]>();
     const dist = new Float64Array(total);
     const prev = new Int32Array(total);
     const prevVia = new Uint8Array(total);
     const seen = new Int32Array(total);
     let stamp = 0;
+    const isTerm = new Uint8Array(total);
+    for (const s of states) for (const e of [s.srcEsc, ...s.sinkEsc]) isTerm[termNode(e)] = 1;
+    const netEdges: number[][] = states.map(() => []);
+    const netShadows: number[][] = states.map(() => []);
+    const ripCount = new Int32Array(states.length);
+    const RIP_MAX = 6;
+    const STEAL_COST = 30;
 
-    const nodeFreeFor = (nd: number, netIdx: number): boolean => owner[nd] === FREE || owner[nd] === netIdx;
     const inGrid = (l: number, i: number, j: number): boolean => l >= 0 && l < NL && i >= 0 && j >= 0 && i < W && j < H;
 
-    for (const s of order) {
-      const root = termNode(s.srcEsc);
-      s.parent.set(root, -1);
-      const sinks = s.sinkEsc.map((e, k) => ({ node: termNode(e), k })).sort((a, b) => {
-        const da = Math.abs(ii(a.node) - ii(root)) + Math.abs(jj(a.node) - jj(root));
-        const db = Math.abs(ii(b.node) - ii(root)) + Math.abs(jj(b.node) - jj(root));
-        return da - db;
-      });
-      for (const sk of sinks) {
-        if (s.parent.has(sk.node)) continue;
-        // поиск от приёмника к ближайшему узлу дерева; при самопересечении пути (то же ребро проводом и рампой) рампа запрещается и поиск повторяется
-        bannedVia.clear();
-        for (let retry = 0; ; retry++) {
+    /** Освобождает всё, что цепь заняла (кроме закреплённых терминалов): потом её прокладывают заново. */
+    const ripUp = (s: NetState): void => {
+      for (const nd of s.parent.keys()) if (!isTerm[nd]) owner[nd] = FREE;
+      for (const k of netEdges[s.idx]) usedEdge.delete(k);
+      for (const sh of netShadows[s.idx]) if (owner[sh] === SHADOW) owner[sh] = FREE;
+      netEdges[s.idx] = [];
+      netShadows[s.idx] = [];
+      s.parent.clear();
+      s.viaTo.clear();
+      failedBy.delete(s.idx);
+      if (NL > 1)
+        for (const e of [s.srcEsc, ...s.sinkEsc]) {
+          const t = termNode(e) + W * H;
+          if (owner[t] === FREE) owner[t] = -10 - s.idx;
+        }
+    };
+
+    /**
+     * Ищет путь от приёмника к дереву цепи и фиксирует его. С steal узлы других цепей можно занимать за штраф: их владельцев
+     * выдавливают (ripUp) и возвращают в список `victims` для повторной прокладки.
+     */
+    const routeSink = (s: NetState, sk: { node: number; k: number }, steal: boolean): { ok: boolean; victims: number[] } => {
+      const mine = (nd: number): boolean => owner[nd] === FREE || owner[nd] === s.idx;
+      const foreign = (nd: number): boolean => owner[nd] >= 0 && owner[nd] !== s.idx && !isTerm[nd] && ripCount[owner[nd]] < RIP_MAX;
+      const passable = (nd: number): boolean => mine(nd) || (steal && foreign(nd));
+      const extra = (nd: number): number => (steal && foreign(nd) ? STEAL_COST : 0);
+      const sameDir = (p: number, c: number, n2: number): boolean => ii(c) - ii(p) === ii(n2) - ii(c) && jj(c) - jj(p) === jj(n2) - jj(c) && li(p) === li(c);
+      bannedVia.clear();
+      for (let retry = 0; ; retry++) {
         stamp++;
         const heap = new MinHeap();
         seen[sk.node] = stamp;
@@ -408,6 +430,35 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
         prev[sk.node] = -1;
         heap.push(sk.node, 0);
         let hit = -1;
+        const viaOk = (lo: number, hi: number, dx: number, dz: number): boolean => {
+          if (bannedVia.has(lo * total + hi)) return false;
+          if (!passable(lo) || !passable(hi)) return false;
+          const l0 = li(lo);
+          const shadow = NI(l0 + 1, ii(lo), jj(lo));
+          if (owner[shadow] !== FREE && owner[shadow] !== -10 - s.idx && !(steal && foreign(shadow))) return false;
+          const lowEdge = NI(l0, ii(lo) + dx, jj(lo) + dz);
+          if (usedEdge.has(edgeKey(lo, lowEdge)) && !(steal && (foreign(lo) || foreign(lowEdge)))) return false;
+          const [mx, mz] = midCol(l0, lo, lowEdge);
+          const y0 = layerY(l0);
+          // клетки рампы: серединная опора на уровне нижнего слоя и пыль на уровень выше; над нижним узлом должно быть пусто
+          if (colTop(mx, mz) > y0 - 3 || !quietAround(mx, mz, y0 + 1)) return false;
+          if (claims.has(key(mx, y0, mz)) || claims.has(key(mx, y0 + 1, mz))) return false;
+          const hx = nodeX(ii(hi));
+          const hz = nodeZ(jj(hi));
+          if (colTop(hx, hz) > y0 - 2 || !quietAround(hx, hz, y0 + 2)) return false;
+          if (claims.has(key(hx, y0 + 1, hz))) return false;
+          return true;
+        };
+        const relaxVia = (from: number, to: number, d: number): void => {
+          const nd2 = d + 7 + extra(to);
+          if (seen[to] !== stamp || nd2 < dist[to]) {
+            seen[to] = stamp;
+            dist[to] = nd2;
+            prev[to] = from;
+            prevVia[to] = 1;
+            heap.push(to, nd2);
+          }
+        };
         while (heap.size > 0) {
           const [nd, d] = heap.pop();
           if (d > dist[nd]) continue;
@@ -424,11 +475,11 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
             const j2 = j + dz;
             if (!inGrid(l, i2, j2)) continue;
             const nb = NI(l, i2, j2);
-            if (!nodeFreeFor(nb, s.idx)) continue;
-            if (usedEdge.has(edgeKey(nd, nb))) continue;
+            if (!passable(nb)) continue;
+            if (usedEdge.has(edgeKey(nd, nb)) && !(steal && (foreign(nd) || foreign(nb)))) continue;
             const [mx, mz] = midCol(l, nd, nb);
             if (!usableCol(l, mx, mz)) continue;
-            const nd2 = d + 1 + (prev[nd] >= 0 && sameDir(prev[nd], nd, nb, W, H) ? 0 : 0.35);
+            const nd2 = d + 1 + extra(nb) + (prev[nd] >= 0 && sameDir(prev[nd], nd, nb) ? 0 : 0.35);
             if (seen[nb] !== stamp || nd2 < dist[nb]) {
               seen[nb] = stamp;
               dist[nb] = nd2;
@@ -442,70 +493,17 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
             // вверх: нижний узел = (l, i, j), верхний = (l+1, i+dx, j+dz)
             if (l + 1 < NL && inGrid(l + 1, i + dx, j + dz)) {
               const up = NI(l + 1, i + dx, j + dz);
-              if (viaOk(nd, up, dx, dz, true)) relaxVia(nd, up, d);
+              if (viaOk(nd, up, dx, dz)) relaxVia(nd, up, d);
             }
             // вниз: верхний = (l, i, j), нижний = (l−1, i−dx, j−dz) со смещением (dx, dz) от нижнего к верхнему
             if (l - 1 >= 0 && inGrid(l - 1, i - dx, j - dz)) {
               const lo = NI(l - 1, i - dx, j - dz);
-              if (viaOk(lo, nd, dx, dz, false)) relaxVia(nd, lo, d);
+              if (viaOk(lo, nd, dx, dz)) relaxVia(nd, lo, d);
             }
           }
         }
-        function sameDir(p: number, c: number, n2: number, w: number, h: number): boolean {
-          void w;
-          void h;
-          return (ii(c) - ii(p)) === (ii(n2) - ii(c)) && (jj(c) - jj(p)) === (jj(n2) - jj(c)) && li(p) === li(c);
-        }
-        function viaOk(lo: number, hi: number, dx: number, dz: number, _up: boolean): boolean {
-          void _up;
-          if (bannedVia.has(lo * total + hi)) return false;
-          if (!nodeFreeFor(lo, s.idx) || !nodeFreeFor(hi, s.idx)) return false;
-          const l0 = li(lo);
-          const shadow = NI(l0 + 1, ii(lo), jj(lo));
-          if (owner[shadow] !== FREE && owner[shadow] !== -10 - s.idx) return false;
-          const lowEdge = NI(l0, ii(lo) + dx, jj(lo) + dz);
-          if (usedEdge.has(edgeKey(lo, lowEdge))) return false;
-          const [mx, mz] = midCol(l0, lo, lowEdge);
-          const y0 = layerY(l0);
-          // клетки рампы: серединная опора на уровне нижнего слоя и пыль на уровень выше; над нижним узлом должно быть пусто
-          if (colTop(mx, mz) > y0 - 3 || !quietAround(mx, mz, y0 + 1)) return false;
-          if (claims.has(key(mx, y0, mz)) || claims.has(key(mx, y0 + 1, mz))) return false;
-          const hx = nodeX(ii(hi));
-          const hz = nodeZ(jj(hi));
-          if (colTop(hx, hz) > y0 - 2 || !quietAround(hx, hz, y0 + 2)) return false;
-          if (claims.has(key(hx, y0 + 1, hz))) return false;
-          // нижний узел не должен быть занят чужой рампой, а над ним ничего нет
-          return true;
-        }
-        function relaxVia(from: number, to: number, d: number): void {
-          const nd2 = d + 7;
-          if (seen[to] !== stamp || nd2 < dist[to]) {
-            seen[to] = stamp;
-            dist[to] = nd2;
-            prev[to] = from;
-            prevVia[to] = 1;
-            heap.push(to, nd2);
-          }
-        }
-        if (hit < 0) {
-          if (process.env.FLOOR_DEBUG && tries === 0) {
-            let reached = 0;
-            for (let q = 0; q < total; q++) if (seen[q] === stamp) reached++;
-            const st = (l: number, i: number, j: number): string => {
-              if (!inGrid(l, i, j)) return 'out';
-              const o = owner[NI(l, i, j)];
-              return o === FREE ? 'free' : o === BLOCK ? 'BLOCK' : o === SHADOW ? 'SHADOW' : `#${o}`;
-            };
-            const t = sk.node;
-            const e = s.sinkEsc[sk.k];
-            process.stderr.write(`FAIL ${s.net.name} sink${sk.k} term=(${nodeX(ii(t))},${nodeZ(jj(t))}) reached=${reached} dirs=${[...D4].map(([dx, dz]) => `${dx},${dz}:${st(0, ii(t) + dx, jj(t) + dz)}/${st(1, ii(t) + dx, jj(t) + dz)}`).join(' ')} up=${st(1, ii(t), jj(t))} esc=${e.cells.length}\n`);
-          }
-          failed.push(`${s.net.name} → вывод ${sk.k}`);
-          prio.set(s.idx, (prio.get(s.idx) ?? 0) + 1);
-          break;
-        }
+        if (hit < 0) return { ok: false, victims: [] };
         // фиксируем путь: от hit назад по prev до приёмника, родители указывают к источнику
-        // prev[x] — узел, из которого пришли в x при поиске от приёмника; цепочка идёт от hit к приёмнику
         let cur = hit;
         const chain: number[] = [];
         while (cur !== -1) {
@@ -513,65 +511,96 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
           cur = prev[cur];
         }
         // самопересечение: ребро нижнего слоя одновременно проводом и опорой рампы, либо узел пути стоит над нижним узлом рампы
-        {
-          const flat = new Set<number>();
-          const viaEdges = new Map<number, number>();
-          const chainSet = new Set(chain);
-          const bad: number[] = [];
-          for (let t = 0; t + 1 < chain.length; t++) {
-            const a = chain[t];
-            const b = chain[t + 1];
-            if (li(a) === li(b)) {
-              flat.add(edgeKey(a, b));
-              continue;
-            }
-            const lo = li(a) < li(b) ? a : b;
-            const hi = lo === a ? b : a;
-            const l0 = li(lo);
-            const lowEdge = NI(l0, ii(hi), jj(hi));
-            const ek = edgeKey(lo, lowEdge);
-            if (viaEdges.has(ek) || chainSet.has(NI(l0 + 1, ii(lo), jj(lo)))) bad.push(lo * total + hi);
-            viaEdges.set(ek, lo * total + hi);
-          }
-          for (const [ek, vk] of viaEdges) if (flat.has(ek)) bad.push(vk);
-          if (bad.length > 0 && retry < 30) {
-            for (const b of bad) bannedVia.add(b);
+        const flat = new Set<number>();
+        const viaEdges = new Map<number, number>();
+        const chainSet = new Set(chain);
+        const bad: number[] = [];
+        const victimSet = new Set<number>();
+        for (let t = 0; t + 1 < chain.length; t++) {
+          const a = chain[t];
+          const b = chain[t + 1];
+          for (const nd of [a, b]) if (owner[nd] >= 0 && owner[nd] !== s.idx) victimSet.add(owner[nd]);
+          if (li(a) === li(b)) {
+            flat.add(edgeKey(a, b));
             continue;
           }
-          if (bad.length > 0) {
-            failed.push(`${s.net.name} → вывод ${sk.k} (самопересечение)`);
-            prio.set(s.idx, (prio.get(s.idx) ?? 0) + 1);
-            break;
-          }
+          const lo = li(a) < li(b) ? a : b;
+          const hi = lo === a ? b : a;
+          const l0 = li(lo);
+          const lowEdge = NI(l0, ii(hi), jj(hi));
+          const ek = edgeKey(lo, lowEdge);
+          const shadow = NI(l0 + 1, ii(lo), jj(lo));
+          if (owner[shadow] >= 0 && owner[shadow] !== s.idx) victimSet.add(owner[shadow]);
+          if (viaEdges.has(ek) || chainSet.has(shadow)) bad.push(lo * total + hi);
+          viaEdges.set(ek, lo * total + hi);
         }
+        for (const [ek, vk] of viaEdges) if (flat.has(ek)) bad.push(vk);
+        if (bad.length > 0) {
+          if (retry >= 30) return { ok: false, victims: [] };
+          for (const b of bad) bannedVia.add(b);
+          continue;
+        }
+        const victims = [...victimSet];
+        if (victims.length > 3) return { ok: false, victims: [] };
+        for (const vi of victims) ripUp(states[vi]);
         // chain: hit → ... → sk.node ; родитель узла chain[t+1] — chain[t]
         for (let t = 0; t + 1 < chain.length; t++) {
           const a = chain[t];
           const b = chain[t + 1];
           if (!s.parent.has(b)) s.parent.set(b, a);
           owner[b] = s.idx;
-          if (prevVia[a] === 1 || isVia(a, b)) {
+          if (prevVia[a] === 1 || li(a) !== li(b)) {
             s.viaTo.add(b);
-            claimVia(a, b);
-          } else usedEdge.add(edgeKey(a, b));
+            const lo = li(a) < li(b) ? a : b;
+            const hi = lo === a ? b : a;
+            const l0 = li(lo);
+            const lowEdge = NI(l0, ii(hi), jj(hi));
+            const ek = edgeKey(lo, lowEdge);
+            usedEdge.add(ek);
+            netEdges[s.idx].push(ek);
+            const shadow = NI(l0 + 1, ii(lo), jj(lo));
+            owner[shadow] = SHADOW;
+            netShadows[s.idx].push(shadow);
+          } else {
+            const ek = edgeKey(a, b);
+            usedEdge.add(ek);
+            netEdges[s.idx].push(ek);
+          }
         }
-        function isVia(a: number, b: number): boolean {
-          return li(a) !== li(b);
+        return { ok: true, victims };
+      }
+    };
+
+    const queue: NetState[] = [...order];
+    let ripTotal = 0;
+    const RIP_BUDGET = states.length * 3;
+    const routeNet = (s: NetState): void => {
+      const root = termNode(s.srcEsc);
+      s.parent.set(root, -1);
+      const sinks = s.sinkEsc
+        .map((e, k) => ({ node: termNode(e), k }))
+        .sort((x, y) => Math.abs(ii(x.node) - ii(root)) + Math.abs(jj(x.node) - jj(root)) - (Math.abs(ii(y.node) - ii(root)) + Math.abs(jj(y.node) - jj(root))));
+      for (const sk of sinks) {
+        if (s.parent.has(sk.node)) continue;
+        let r = routeSink(s, sk, false);
+        if (!r.ok && ripTotal < RIP_BUDGET) {
+          r = routeSink(s, sk, true);
+          for (const vi of r.victims) {
+            ripCount[vi]++;
+            ripTotal++;
+            queue.push(states[vi]);
+          }
         }
-        function claimVia(a: number, b: number): void {
-          const lo = li(a) < li(b) ? a : b;
-          const hi = lo === a ? b : a;
-          const l0 = li(lo);
-          const dx = ii(hi) - ii(lo);
-          const dz = jj(hi) - jj(lo);
-          const lowEdge = NI(l0, ii(lo) + dx, jj(lo) + dz);
-          usedEdge.add(edgeKey(lo, lowEdge));
-          owner[NI(l0 + 1, ii(lo), jj(lo))] = SHADOW;
-        }
-        break;
+        if (!r.ok) {
+          const f = failedBy.get(s.idx) ?? [];
+          f.push(`${s.net.name} → вывод ${sk.k}`);
+          failedBy.set(s.idx, f);
+          prio.set(s.idx, (prio.get(s.idx) ?? 0) + 1);
         }
       }
-    }
+    };
+    while (queue.length > 0) routeNet(queue.shift()!);
+    const failed = [...failedBy.values()].flat();
     opts.progress?.(`  не проложено цепей: ${failed.length}${failed.length ? ` (${failed.slice(0, 4).join('; ')})` : ''}`);
     if (failed.length === 0) finalStates = order;
     else if (failed.length < bestFail.length || bestFail.length === 0) bestFail = failed;
