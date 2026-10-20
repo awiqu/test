@@ -8,6 +8,7 @@ import { Built, BuildSettings, defaultBuildSettings } from '../../src/cpu/comput
 import { buildTimed } from '../../src/cpu/timing';
 import { TickSim } from '../../src/cpu/tick';
 import { richProject } from './richProject';
+import { regProject, regRichProject } from './regProject';
 import { macroSettings } from '../../src/cpu/macro';
 
 const log = (s: string) => process.stderr.write(s + '\n');
@@ -65,7 +66,14 @@ function physicalVsEmulator(project: ComputerProject, source: string, o: RunOpti
     const pc = bits(pr.pc);
     const a = bits(pr.a);
     if (!m.halted && pc !== m.pc) return `шаг ${k}: PC ${pc}, ожидалось ${m.pc}`;
-    if (a !== m.env.R[0]) return `шаг ${k}: A=${a}, ожидалось ${m.env.R[0]} (PC ${m.pc})`;
+    if (spec.arch === 'accumulator' && a !== m.env.R[0]) return `шаг ${k}: A=${a}, ожидалось ${m.env.R[0]} (PC ${m.pc})`;
+    if (spec.arch === 'register') {
+      for (let r = 0; r < spec.regCount; r++) {
+        const cells = pr.regs.get(r);
+        const got = cells ? bits(cells) : 0;
+        if (got !== m.env.R[r]) return `шаг ${k}: R${r}=${got}, ожидалось ${m.env.R[r]} (PC ${m.pc})`;
+      }
+    }
     for (const f of spec.flags) {
       const cell = pr.flags[f];
       if (cell && plan.feat.flags.includes(f) && sim.powerAt(...cell) > 0 !== (m.env.flags[f] === 1)) return `шаг ${k}: флаг ${f}=${sim.powerAt(...cell) > 0 ? 1 : 0}, ожидалось ${m.env.flags[f]}`;
@@ -96,6 +104,16 @@ describe('physical computer = emulator (tick simulator)', () => {
     const p = newProject('acc4');
     expect(physicalVsEmulator(p, p.programs[1].source, { cycles: 16, switches: 0b0101 })).toBeNull();
   }, 1800000);
+
+  it('register machine: registers, memory, ports', () => {
+    const p = regProject();
+    expect(physicalVsEmulator(p, p.programs[0].source, { cycles: 12 })).toBeNull();
+  }, 3600000);
+
+  it('register machine: ALU, flags, indirect memory (LDR/STR), jumps and JR', () => {
+    const { project, source } = regRichProject();
+    expect(physicalVsEmulator(project, source, { cycles: 30 })).toBeNull();
+  }, 3600000);
 
   it('alternative gate variants (OR/AND/NOR/XOR implementations) still compute correctly', () => {
     const p = newProject('acc4');

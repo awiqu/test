@@ -30,6 +30,7 @@ export function toBuildOutput(e: ComputerExport): BuildOutput {
   for (const l of pr.lamps) controls.push({ name: `${l.port}${l.bit}`, kind: 'lamp', pos: rel(l.pos) });
   pr.pc.forEach((c, i) => controls.push({ name: `PC${i}`, kind: 'state', pos: rel(c) }));
   pr.a.forEach((c, i) => controls.push({ name: `A${i}`, kind: 'state', pos: rel(c) }));
+  for (const [r, cells] of pr.regs) cells.forEach((c, i) => controls.push({ name: `R${r}.${i}`, kind: 'state', pos: rel(c) }));
   return {
     fileName: e.fileName,
     bytes: e.bytes,

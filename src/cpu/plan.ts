@@ -2,7 +2,7 @@ import { ComputerProject, FlagName, Issue } from '../computer/types';
 import { assemble, disassemble } from '../computer/asm';
 import { portMap } from '../computer/spec';
 import { CTL_NAMES, CtlName, MicroRow, deriveControl, expandRom, fieldWidth, emptyCtl } from './micro';
-import { Feat, JUMP_CTLS } from './hwnets';
+import { Feat, JUMP_CTLS, RegFeat } from './hwnets';
 import { DataRow } from './dataarray';
 
 export type BuildMode = 'program' | 'isa';
@@ -60,10 +60,6 @@ export function planComputer(project: ComputerProject, opts: PlanOptions): Plan 
     programName: '',
     mode: opts.mode,
   };
-  if (spec.arch !== 'accumulator') {
-    err('Физическая постройка пока поддерживает только аккумуляторную архитектуру (один регистр A).');
-    return empty;
-  }
   if (spec.stack.enabled) warn('Стек в физической постройке не реализован: инструкции PUSH/POP/CALL/RET не поддерживаются.');
   const prog = opts.programId ? project.programs.find((p) => p.id === opts.programId) : project.programs[0];
   const source = opts.source ?? prog?.source;
@@ -111,7 +107,9 @@ export function planComputer(project: ComputerProject, opts: PlanOptions): Plan 
   // Память данных
   const ports = portMap(spec);
   const memAddrs = new Set<number>();
-  for (const r of rows) if (r.ctl.uMem || r.ctl.weM) memAddrs.add(r.ob);
+  // адрес в регистре (LDR/STR) заранее неизвестен: тогда строится всё адресное пространство данных
+  const indirect = rows.some((r) => r.ctl.uAddrR) || used.has('uAddrR');
+  for (const r of rows) if ((r.ctl.uMem || r.ctl.weM) && !r.ctl.uAddrR) memAddrs.add(r.ob);
   const dataRows: DataRow[] = [];
   const skippedPorts: string[] = [];
   const addrIndex = new Map<number, number>();
@@ -133,7 +131,7 @@ export function planComputer(project: ComputerProject, opts: PlanOptions): Plan 
     return null;
   };
   let RA: number;
-  if (opts.mode === 'program') {
+  if (opts.mode === 'program' && !indirect) {
     const sorted = [...memAddrs].sort((a, b) => a - b);
     sorted.forEach((a, i) => addrIndex.set(a, i));
     RA = log2c(sorted.length);
@@ -150,12 +148,12 @@ export function planComputer(project: ComputerProject, opts: PlanOptions): Plan 
     }
   }
   if (skippedPorts.length) warn(`Устройства без физической реализации: порты ${[...new Set(skippedPorts)].join(', ')} не работают (чтение даёт 0, запись игнорируется).`);
-  const hasData = memAddrs.size > 0 || opts.mode === 'isa';
+  const hasData = memAddrs.size > 0 || indirect || opts.mode === 'isa';
 
   // Сжатие адресов и размеры
   const P = opts.mode === 'program' ? log2c(rows.length) : spec.pcBits;
   for (const r of rows) {
-    if (r.ctl.uMem || r.ctl.weM) r.ob = addrIndex.get(r.ob) ?? 0;
+    if ((r.ctl.uMem || r.ctl.weM) && !r.ctl.uAddrR) r.ob = addrIndex.get(r.ob) ?? 0;
     const jumps = JUMP_CTLS.some((j) => r.ctl[j]);
     if (jumps && r.ob >= 2 ** P) err(`Адрес ${r.address}: переход на ${r.ob}, а счётчик команд ${P}-битный (доступно ${2 ** P} адресов).`);
   }
@@ -164,7 +162,7 @@ export function planComputer(project: ComputerProject, opts: PlanOptions): Plan 
   let OB = 1;
   for (const r of rows) {
     const jumps = JUMP_CTLS.some((j) => r.ctl[j]);
-    const w = jumps ? P : r.ctl.uMem || r.ctl.weM ? RA : r.ctl.uImm ? spec.dataBits : 0;
+    const w = r.ctl.jReg ? 0 : jumps ? P : (r.ctl.uMem || r.ctl.weM) && !r.ctl.uAddrR ? RA : r.ctl.uImm ? spec.dataBits : 0;
     OB = Math.max(OB, w);
   }
   if (opts.mode === 'isa') OB = Math.max(OB, P, RA, spec.dataBits);
@@ -179,14 +177,43 @@ export function planComputer(project: ComputerProject, opts: PlanOptions): Plan 
   const hasAlu = used.has('weA') || used.has('weF');
   if (!used.has('weF')) flags.length = 0;
 
-  const feat: Feat = { D: spec.dataBits, P, RA, OB, used, flags };
+  // Файл регистров: триггеры у регистров, в которые пишут; читаемые, но не записываемые регистры всегда равны нулю
+  let regs: RegFeat | undefined;
+  if (spec.arch === 'register') {
+    const written = new Set<number>();
+    const readA = new Set<number>();
+    const readB = new Set<number>();
+    if (opts.mode === 'isa') {
+      for (let r = 0; r < spec.regCount; r++) {
+        written.add(r);
+        readA.add(r);
+        readB.add(r);
+      }
+    } else {
+      for (const r of rows) {
+        if (r.ctl.weA && r.regs?.w !== undefined) written.add(r.regs.w);
+        if (r.regs?.a !== undefined) readA.add(r.regs.a);
+        if (r.regs?.b !== undefined) readB.add(r.regs.b);
+      }
+    }
+    const list = [...written].sort((a, b) => a - b);
+    regs = { list, readA: [...readA].filter((r) => written.has(r)).sort((a, b) => a - b), readB: [...readB].filter((r) => written.has(r)).sort((a, b) => a - b) };
+    if (list.length > 8 || spec.dataBits * list.length > 64) warn(`Файл регистров из ${list.length} × ${spec.dataBits} триггеров даст очень большую плату (десятки тысяч блоков на регистр); режим «под программу» строит только регистры, в которые программа пишет.`);
+  }
+
+  const feat: Feat = { D: spec.dataBits, P, RA, OB, used, flags, regs };
 
   // Столбцы ПЗУ
   const columns: RomColumn[] = [];
   for (let i = 0; i < OB; i++) columns.push({ name: `ob${i}`, bit: (r) => ((rows[r]?.ob ?? 0) >> i & 1) === 1 });
   for (const n of CTL_NAMES) if (used.has(n) && n !== 'weA' && n !== 'weF') columns.push({ name: n, bit: (r) => rows[r]?.ctl[n] === true });
-  if (used.has('weA')) columns.push({ name: 'nweA', bit: (r) => rows[r]?.ctl.weA !== true });
+  if (used.has('weA') && !regs) columns.push({ name: 'nweA', bit: (r) => rows[r]?.ctl.weA !== true });
   if (used.has('weF')) columns.push({ name: 'nweF', bit: (r) => rows[r]?.ctl.weF !== true });
+  if (regs) {
+    for (const k of regs.readA) columns.push({ name: `selA${k}`, bit: (r) => rows[r]?.regs?.a === k });
+    for (const k of regs.readB) columns.push({ name: `selB${k}`, bit: (r) => rows[r]?.regs?.b === k });
+    for (const k of regs.list) columns.push({ name: `nweR${k}`, bit: (r) => !(rows[r]?.ctl.weA === true && rows[r]?.regs?.w === k) });
+  }
   void fieldWidth;
   return {
     ok: true,

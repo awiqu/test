@@ -71,6 +71,22 @@ await step('Постройка ПК');
 check('ошибка программы видна до постройки', (await page.locator('.cs-rom-opts .badge.bad').count()) > 0);
 check('кнопка «Построить» недоступна при ошибке', await page.locator('button:has-text("Построить")').first().isDisabled());
 
+// регистровая машина («Учебный-8»): файл регистров, косвенная память и т. п. строятся тем же шагом
+await step('Характеристики');
+await page.locator('.cs-card', { hasText: 'Учебный-8' }).click();
+await step('Постройка ПК');
+const regSide = await page.locator('.cs-rom-opts').innerText();
+check('регистровая машина: разбор показывает регистры с триггерами', /регистров с триггерами: \d+/.test(regSide), (/регистров с триггерами[^\n]*/.exec(regSide) ?? [''])[0]);
+check('стек без оборудования отмечен предупреждением', regSide.includes('Стек в физической постройке'));
+await page.click('button:has-text("Построить компьютер")');
+await page.waitForSelector('.result-bar .stats', { timeout: 1200000 });
+const regStats = await page.locator('.result-bar .stats').innerText();
+check('регистровая плата построена', /\d+×\d+×\d+/.test(regStats) && regStats.includes('блоков'), regStats.replace(/\n/g, ' '));
+await page.click('.preview-bar button:has-text("Руководство")');
+const regGuide = await page.locator('.cs-guide').innerText();
+check('руководство описывает регистровый процессор и порты A/B', regGuide.includes('регистровый процессор') && regGuide.includes('порт'));
+await page.screenshot({ path: `${SHOT}/build-regs-guide.png` });
+
 check('без ошибок в консоли', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 console.log(failed ? `\n${failed} проверок не пройдено` : '\nВсе проверки пройдены');

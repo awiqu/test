@@ -42,8 +42,6 @@ export function useComputerBuild(): BuildState & { start: (project: ComputerProj
 
   const start = useCallback((project: ComputerProject, settings: ComputerExportSettings) => {
     const id = ++idRef.current;
-    workerRef.current?.terminate();
-    workerRef.current = null;
     const t0 = performance.now();
     setState((s) => ({ ...s, status: 'running', progress: 'Подготовка…', error: null, issues: [], mainThread: false }));
     const live = (): boolean => id === idRef.current;
@@ -66,11 +64,14 @@ export function useComputerBuild(): BuildState & { start: (project: ComputerProj
     };
     setTimeout(() => {
       if (!live()) return;
-      let worker: Worker | null = null;
-      try {
-        worker = typeof Worker === 'undefined' ? null : createComputerWorker();
-      } catch {
-        worker = null;
+      // воркер живёт между постройками: в нём хранится кэш скомпилированных блоков логики, и повторная постройка идёт заметно быстрее
+      let worker: Worker | null = workerRef.current;
+      if (!worker) {
+        try {
+          worker = typeof Worker === 'undefined' ? null : createComputerWorker();
+        } catch {
+          worker = null;
+        }
       }
       if (!worker) return inMainThread();
       workerRef.current = worker;
@@ -78,12 +79,8 @@ export function useComputerBuild(): BuildState & { start: (project: ComputerProj
         const m = e.data;
         if (m.id !== idRef.current) return;
         if (m.type === 'progress') setState((s) => ({ ...s, progress: m.message }));
-        else {
-          if (m.type === 'result') done(m.result);
-          else fail(m.message, m.issues);
-          worker?.terminate();
-          workerRef.current = null;
-        }
+        else if (m.type === 'result') done(m.result);
+        else fail(m.message, m.issues);
       };
       worker.onerror = () => {
         worker?.terminate();

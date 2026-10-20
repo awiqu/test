@@ -87,7 +87,7 @@ export function BuildStep() {
       <div className="cs-welcome slim">
         <h2>Постройка компьютера для Minecraft</h2>
         <p>
-          Из вашей архитектуры и программы получается настоящий компьютер из редстоуна: ПЗУ с готовыми управляющими словами, счётчик команд, АЛУ, флаги, ОЗУ и порты с рычагами и лампами,
+          Из вашей архитектуры (аккумуляторной или регистровой) и программы получается настоящий компьютер из редстоуна: ПЗУ с готовыми управляющими словами, счётчик команд, АЛУ, файл регистров, флаги, ОЗУ и порты с рычагами и лампами,
           а также такты и сброс. Результат — схема <code>.litematic</code> для Litematica (Minecraft Java 26.2) и руководство по запуску. Перед выдачей плата прогоняется в покадровом
           симуляторе редстоуна: по нему подбирается зазор между фазами триггеров и рекомендуемый такт.
         </p>
@@ -114,6 +114,7 @@ export function BuildStep() {
             {plan?.ok && (
               <small className="dim">
                 ПЗУ {plan.rows.length} слов × {plan.columns.length} бит · данные {plan.feat.D} бит · счётчик {plan.feat.P} бит
+                {plan.feat.regs ? ` · регистров с триггерами: ${plan.feat.regs.list.length} (R${plan.feat.regs.list.join(', R')})` : ''}
                 {plan.skippedPorts.length ? ` · без оборудования: ${plan.skippedPorts.join(', ')}` : ''}
               </small>
             )}
@@ -171,7 +172,7 @@ export function BuildStep() {
                 <input type="number" min={0} max={20000} step={50} value={settings.clockHalfTicks} onChange={(e) => set({ clockHalfTicks: Math.max(0, Math.floor(Number(e.target.value)) || 0) })} />
               </label>
             )}
-            <label className="check"><input type="checkbox" checked={settings.indicators} onChange={(e) => set({ indicators: e.target.checked })} /> Лампы счётчика команд, аккумулятора и флагов</label>
+            <label className="check"><input type="checkbox" checked={settings.indicators} onChange={(e) => set({ indicators: e.target.checked })} /> Лампы счётчика команд, аккумулятора/регистров и флагов</label>
             <label className="check"><input type="checkbox" checked={settings.portLamps} onChange={(e) => set({ portLamps: e.target.checked })} /> Лампы на портах вывода</label>
             <label className="check"><input type="checkbox" checked={settings.autoTiming} onChange={(e) => set({ autoTiming: e.target.checked })} /> Подобрать зазор между фазами замером в симуляторе</label>
             {!settings.autoTiming && (

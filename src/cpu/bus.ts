@@ -232,6 +232,7 @@ export class Bus {
     let ri = 0;
     let wi = 0;
     for (const net of this.nets) {
+      v.owner = net.name;
       const left = net.x ?? lay.leftXs[li++];
       if (left === undefined) throw new Error(`Не хватило столбцов левых магистралей (цепь ${net.name})`);
       const sinkZs = net.sinks.map((s) => s.z);
@@ -285,6 +286,7 @@ export class Bus {
       }
       this.stats.nets++;
     }
+    v.owner = null;
   }
 
   private sink(v: Vox, left: number, s: BusPin): void {

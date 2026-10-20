@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { compileMacro, Macro } from '../../src/cpu/macro';
 import { TickSim } from '../../src/cpu/tick';
-import { Feat, aluANetlist, aluMuxNetlist, flagsNetlist, pcSliceNetlist, takeNetlist } from '../../src/cpu/hwnets';
+import { Feat, aluANetlist, aluMuxNetlist, amuxNetlist, ctlNetlist, flagsNetlist, pcSliceNetlist, rfBitNetlist, takeNetlist } from '../../src/cpu/hwnets';
 import { CtlName, CTL_NAMES } from '../../src/cpu/micro';
 import { rng } from '../helpers';
 
@@ -43,6 +43,59 @@ describe('hardware macros compile and behave like their equations', () => {
         if (!hasTake && mask >= 15) break;
       }
     }
+  });
+
+  it('register file bit slice: two read ports', () => {
+    const f = feat({ used: ['uReg'], regs: { list: [0, 1, 3], readA: [0, 1, 3], readB: [1, 3] } });
+    const m = compileMacro(rfBitNetlist(f));
+    log(`rf bit: ${m.stats.gates} gates, ${m.stats.ms} ms, ${m.size.sx}x${m.size.sz}, pins ${[...m.pins.keys()].join(' ')}`);
+    const ev = evaluator(m);
+    const r = rng(11);
+    for (let k = 0; k < 60; k++) {
+      const v: Record<string, number> = { selA0: 0, selA1: 0, selA3: 0, selB1: 0, selB3: 0, q0: 0, q1: 0, q3: 0 };
+      for (const n of Object.keys(v)) v[n] = r() < 0.5 ? 1 : 0;
+      const ra = (v.selA0 & v.q0) | (v.selA1 & v.q1) | (v.selA3 & v.q3);
+      const rb = (v.selB1 & v.q1) | (v.selB3 & v.q3);
+      expect(ev(v), JSON.stringify(v)).toEqual({ ra, rb });
+    }
+  });
+
+  it('address mux bit and PC slice with jump through a register', () => {
+    const m = compileMacro(amuxNetlist());
+    const ev = evaluator(m);
+    for (let mask = 0; mask < 8; mask++) {
+      const ob = mask & 1, uAddrR = (mask >> 1) & 1, ra = (mask >> 2) & 1;
+      expect(ev({ ob, uAddrR, ra }), `mask ${mask}`).toEqual({ ad: ob | (uAddrR & ra) });
+    }
+    const pm = compileMacro(pcSliceNetlist(true, false, true));
+    const pev = evaluator(pm);
+    const r = rng(12);
+    for (let k = 0; k < 80; k++) {
+      const pc = r() < 0.5 ? 1 : 0, ob = r() < 0.5 ? 1 : 0, c = r() < 0.5 ? 1 : 0, nreset = k % 9 === 4 ? 0 : 1, take = r() < 0.5 ? 1 : 0, jReg = r() < 0.5 ? 1 : 0, ra = r() < 0.5 ? 1 : 0;
+      const tg = ob | (jReg & ra);
+      const d = nreset & (take ? tg : pc ^ c);
+      expect(pev({ pc, ob, c, nreset, take, ntake: 1 - take, jReg, ra }), `k ${k}`).toEqual({ d, co: c & pc });
+    }
+  });
+
+  it('ALU slice takes operand B from the register port', () => {
+    const f = feat({ used: ['uReg', 'uImm', 'eSum', 'sub', 'eB'], regs: { list: [0], readA: [0], readB: [0] } });
+    const m = compileMacro(aluANetlist(f));
+    const ev = evaluator(m);
+    const r = rng(13);
+    for (let k = 0; k < 40; k++) {
+      const v = { a: r() < 0.5 ? 1 : 0, cin: r() < 0.5 ? 1 : 0, uImm: r() < 0.5 ? 1 : 0, ob: r() < 0.5 ? 1 : 0, uReg: r() < 0.5 ? 1 : 0, rb: r() < 0.5 ? 1 : 0, sub: r() < 0.5 ? 1 : 0 };
+      const b0 = (v.uImm & v.ob) | (v.uReg & v.rb);
+      const bx = b0 ^ v.sub;
+      const p = v.a ^ bx;
+      const g = v.a & bx;
+      expect(ev(v), JSON.stringify(v)).toEqual({ bx, s: p ^ v.cin, co: g | (p & v.cin) });
+    }
+  });
+
+  it('control block: per-register write locks', () => {
+    const m = compileMacro(ctlNetlist([0, 2]));
+    expect([...m.pins.keys()].sort()).toEqual(['clk', 'clkd0', 'halt', 'lkMF', 'lkMP', 'lkMR0', 'lkMR2', 'lkS', 'nreset', 'nweF', 'nweR0', 'nweR2', 'nwm', 'reset', 'weM'].sort());
   });
 
   it('take logic', () => {

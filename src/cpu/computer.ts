@@ -2,11 +2,12 @@ import { ExportSettings } from '../compiler/compile';
 import { buildRom, EXT } from './arrays';
 import { buildData, DataLayout } from './dataarray';
 import { Bus, BusNet, BusPin } from './bus';
-import { Card, arrayFeeder, clockCard, ffCard, lampCard, leverCard, placeMacro } from './cards';
+import { Card, arrayFeeder, clockCard, delayCard, delayCells, ffCard, lampCard, leverCard, placeMacro } from './cards';
 import { Macro, macroSettings } from './macro';
 import { getMacro } from './macrolib';
-import { JUMP_CTLS, aluANetlist, aluMuxNetlist, ctlNetlist, flagsNetlist, muxTerms, pcSliceNetlist, takeNetlist } from './hwnets';
+import { JUMP_CTLS, aluANetlist, aluMuxNetlist, amuxNetlist, ctlNetlist, flagsNetlist, muxTerms, pcSliceNetlist, rfBitNetlist, takeNetlist } from './hwnets';
 import { CtlName } from './micro';
+import { findShorts } from './netcheck';
 import { Plan } from './plan';
 import { Vox } from './vox';
 
@@ -41,7 +42,10 @@ export interface Probes {
   /** Рычаг «стоп» автогенератора (включён → такта нет). */
   clockStop: XYZ | null;
   pc: XYZ[];
+  /** Аккумулятор (аккумуляторная архитектура). */
   a: XYZ[];
+  /** Регистры (регистровая архитектура): номер → клетки Q триггеров (младший бит первым). Регистры без триггеров всегда равны нулю. */
+  regs: Map<number, XYZ[]>;
   flags: Partial<Record<'Z' | 'C' | 'N' | 'V', XYZ>>;
   /** Ячейки данных: имя слова → повторители битов (младший первым). */
   ram: Map<string, XYZ[]>;
@@ -99,13 +103,25 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     macroInfo.push({ name, gates: m.stats.gates, ms: m.stats.ms, size: `${m.size.sx}×${m.size.sz}` });
     return m;
   };
-  const mCtl = macro('такты и замки', ctlNetlist(st.guardRt));
-  const mPc0 = macro('разряд счётчика (младший)', pcSliceNetlist(hasTake, true));
-  const mPc = P > 1 ? macro('разряд счётчика', pcSliceNetlist(hasTake, false)) : mPc0;
+  const regsF = f.regs;
+  const mCtl = macro('такты и замки', ctlNetlist(regsF?.list));
+  // разряды счётчика: переход по регистру (jReg) есть только у разрядов, которые есть и у данных
+  const hasJr = has('jReg');
+  const pcMacros: Macro[] = [];
+  const pcMacro = (i: number): Macro => {
+    const jr = hasJr && i < D;
+    const key = i === 0 ? 0 : jr ? 1 : 2;
+    pcMacros[key] ??= macro(i === 0 ? 'разряд счётчика (младший)' : jr ? 'разряд счётчика' : 'разряд счётчика (без регистра)', pcSliceNetlist(hasTake, i === 0, jr));
+    return pcMacros[key];
+  };
   const mTake = hasTake ? macro('условия переходов', takeNetlist(f)) : null;
   const mAluA = plan.hasAlu ? macro('АЛУ: сумматор', aluANetlist(f)) : null;
   const mMux = plan.hasAlu ? macro('АЛУ: выбор результата', aluMuxNetlist(f)) : null;
   const mFlags = plan.hasAlu && f.flags.length > 0 ? macro('флаги', flagsNetlist(f)) : null;
+  const rfPorts = regsF ? { a: regsF.readA.length > 0, b: regsF.readB.length > 0 } : { a: false, b: false };
+  const mRf = regsF && (rfPorts.a || rfPorts.b) ? macro('файл регистров (разряд)', rfBitNetlist(f)) : null;
+  const AMUX = has('uAddrR') ? Math.min(D, RA) : 0;
+  const mAmux = AMUX > 0 ? macro('адрес данных (разряд)', amuxNetlist()) : null;
   progress('Раскладка платы…');
 
   const v = new Vox();
@@ -135,20 +151,30 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
   plan.columns.forEach((c, j) => {
     const add = net(`rom_${c.name}`, { rail: j }, { out: j });
     const m = /^ob(\d+)$/.exec(c.name);
+    const sel = /^(selA|selB|nweR)(\d+)$/.exec(c.name);
     if (m) {
       const k = Number(m[1]);
       if (hasTake && k < P) add(`pcs${k}`, 'ob');
       if (k < D && plan.hasAlu) add(`aluA${k}`, 'ob');
-      if (hasData && k < RA) add('data', `addr${k}`);
+      if (hasData && k < RA) {
+        if (k < AMUX) add(`amux${k}`, 'ob');
+        else add('data', `addr${k}`);
+      }
+    } else if (sel) {
+      // регистровая архитектура: по одному столбцу ПЗУ на выбор регистра портом A/B и на запись в регистр
+      if (sel[1] === 'nweR') add('ctl', c.name);
+      else for (let i = 0; i < D; i++) add(`rf${i}`, c.name);
     } else {
       const ctl = c.name as CtlName;
-      if (['uImm', 'uMem', 'sub'].includes(ctl)) for (let i = 0; i < D; i++) add(`aluA${i}`, ctl);
+      if (['uImm', 'uMem', 'sub', 'uReg'].includes(ctl)) for (let i = 0; i < D; i++) add(`aluA${i}`, ctl);
       if (ctl === 'k1') add('aluA0', 'k1');
       if (ctl === 'sub') add('aluA0', 'cin');
       if (['eSum', 'eAnd', 'eOr', 'eXor', 'eNot', 'eShl', 'eShr', 'eB'].includes(ctl)) for (let i = 0; i < D; i++) add(`mux${i}`, ctl);
       if (['eSum', 'eShl', 'eShr', 'sub'].includes(ctl)) add('flags', ctl);
       if (JUMP_CTLS.includes(ctl)) add('take', ctl);
       if (['weM', 'halt', 'nweA', 'nweF'].includes(ctl)) add('ctl', ctl);
+      if (ctl === 'uAddrR') for (let k = 0; k < AMUX; k++) add(`amux${k}`, 'uAddrR');
+      if (ctl === 'jReg') for (let k = 0; k < Math.min(P, D); k++) add(`pcs${k}`, 'jReg');
     }
   });
   // счётчик команд
@@ -183,7 +209,15 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
   }
   if (plan.hasAlu) for (let i = 0; i < D; i++) nreset(`mux${i}`, 'nreset');
   if (plan.hasAlu && f.flags.length) nreset('flags', 'nreset');
-  if (plan.hasAlu) {
+  if (plan.hasAlu && regsF) {
+    for (const r of regsF.list) {
+      const lk = net(`lkMR${r}`, { card: 'ctl', side: 'east', pin: `lkMR${r}` });
+      for (let i = 0; i < D; i++) {
+        lkS(`ffR${r}_${i}`, 'lkS');
+        lk(`ffR${r}_${i}`, 'lkM');
+      }
+    }
+  } else if (plan.hasAlu) {
     const lkMA = net('lkMA', { card: 'ctl', side: 'east', pin: 'lkMA' });
     for (let i = 0; i < D; i++) {
       lkS(`ffA${i}`, 'lkS');
@@ -198,24 +232,47 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     }
   }
   if (hasData) net('nwm', { card: 'ctl', side: 'east', pin: 'nwm' })('data', 'nwm');
-  net('clk', { card: 'clock', side: 'east', pin: 'out' })('ctl', 'clk');
+  const clkNet = net('clk', { card: 'clock', side: 'east', pin: 'out' });
+  clkNet('ctl', 'clk');
+  clkNet('guard', 'in');
+  net('clkd0', { card: 'guard', side: 'east', pin: 'out' })('ctl', 'clkd0');
   net('reset', { card: 'resetLever', side: 'east', pin: 'out' })('ctl', 'reset');
+  // адрес данных из регистра: мультиплексор адреса ставится между ПЗУ/портом A и массивом данных
+  for (let k = 0; k < AMUX; k++) net(`ad${k}`, { card: `amux${k}`, side: 'east', pin: 'ad' })('data', `addr${k}`);
 
   // тракт данных
   if (plan.hasAlu) {
     const hasNot = muxTerms(f).some((t) => t.ctl === 'eNot');
     for (let i = 0; i < D; i++) {
-      const a = net(`a${i}`, { card: `ffA${i}`, side: 'west', pin: 'Q' });
+      // источник первого операнда: аккумулятор или порт A файла регистров
+      const portA = regsF ? (rfPorts.a ? net(`ra${i}`, { card: `rf${i}`, side: 'east', pin: 'ra' }) : null) : net(`a${i}`, { card: `ffA${i}`, side: 'west', pin: 'Q' });
+      const a = (card: string, pin: string): void => portA?.(card, pin);
       a(`aluA${i}`, 'a');
       if (hasNot) a(`mux${i}`, 'a');
       if (has('eShr') && i >= 1) a(`mux${i - 1}`, 'an');
       if (has('eShl') && i + 1 < D) a(`mux${i + 1}`, 'ap');
-      if (hasData) a('data', `wbl${i}`);
       if (mFlags && i === D - 1) a('flags', 'am');
       if (mFlags && i === 0) a('flags', 'a0');
-      if (st.indicators) a(`lampA${i}`, 'in');
+      if (regsF) {
+        if (hasJr && i < P) a(`pcs${i}`, 'ra');
+        if (i < AMUX) a(`amux${i}`, 'ra');
+        for (const r of regsF.list) {
+          const q = net(`q${r}_${i}`, { card: `ffR${r}_${i}`, side: 'west', pin: 'Q' });
+          if (mRf && (regsF.readA.includes(r) || regsF.readB.includes(r))) q(`rf${i}`, `q${r}`);
+          if (st.indicators) q(`lampR${r}_${i}`, 'in');
+        }
+        if (rfPorts.b) {
+          const rb = net(`rb${i}`, { card: `rf${i}`, side: 'east', pin: 'rb' });
+          if (has('uReg')) rb(`aluA${i}`, 'rb');
+          if (hasData && has('weM')) rb('data', `wbl${i}`);
+        }
+      } else {
+        if (hasData) a('data', `wbl${i}`);
+        if (st.indicators) a(`lampA${i}`, 'in');
+      }
       const r = net(`r${i}`, { card: `mux${i}`, side: 'east', pin: 'r' });
-      r(`ffA${i}`, 'D');
+      if (regsF) for (const reg of regsF.list) r(`ffR${reg}_${i}`, 'D');
+      else r(`ffA${i}`, 'D');
       if (mFlags && f.flags.includes('Z')) r('flags', `r${i}`);
       if (f.flags.includes('N') && i === D - 1) r('ffFN', 'D');
       for (const o of ['bx', 'p', 'g', 'o', 's']) net(`${o}${i}`, { card: `aluA${i}`, side: 'east', pin: o })(`mux${i}`, o);
@@ -280,10 +337,11 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
       return c;
     },
   });
+  addPlan({ name: 'guard', w: delayCells(st.guardRt) + 8, h: 4, place: (x0, z0) => delayCard(v, 'guard', x0 + 4, z0 + 2, st.guardRt) });
   macroPlan('ctl', mCtl);
   if (mTake) macroPlan('take', mTake);
   for (let i = 0; i < P; i++) {
-    macroPlan(`pcs${i}`, i === 0 ? mPc0 : mPc);
+    macroPlan(`pcs${i}`, pcMacro(i));
     ffPlan(`ffP${i}`);
   }
   let dataLayout: DataLayout | undefined;
@@ -321,22 +379,31 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     for (let i = 0; i < D; i++) {
       macroPlan(`aluA${i}`, mAluA);
       macroPlan(`mux${i}`, mMux);
-      ffPlan(`ffA${i}`);
+      if (regsF) {
+        if (mRf) macroPlan(`rf${i}`, mRf);
+        for (const r of regsF.list) ffPlan(`ffR${r}_${i}`);
+      } else ffPlan(`ffA${i}`);
     }
   }
+  if (mAmux) for (let k = 0; k < AMUX; k++) macroPlan(`amux${k}`, mAmux);
   if (mFlags) {
     macroPlan('flags', mFlags);
     for (const fl of f.flags) ffPlan(`ffF${fl}`);
   }
   if (st.indicators) {
     for (let i = 0; i < P; i++) lampPlan(`lampPc${i}`);
-    if (plan.hasAlu) for (let i = 0; i < D; i++) lampPlan(`lampA${i}`);
+    if (plan.hasAlu) {
+      if (regsF) for (let i = 0; i < D; i++) for (const r of regsF.list) lampPlan(`lampR${r}_${i}`);
+      else for (let i = 0; i < D; i++) lampPlan(`lampA${i}`);
+    }
     for (const fl of f.flags) lampPlan(`lampF${fl}`);
   }
 
   // ───── порядок карточек по потоку данных ─────
   const rankOf = (name: string): number => {
     const m = /^(pcs|ffP|lampPc|aluA|mux|ffA|lampA)(\d+)$/.exec(name);
+    const rr = /^(ffR|lampR)(\d+)_(\d+)$/.exec(name);
+    const rf = /^(rf|amux)(\d+)$/.exec(name);
     if (name === 'take') return 0;
     if (name.startsWith('ffF')) return 1;
     if (name.startsWith('lampF')) return 2;
@@ -344,9 +411,13 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
       const i = Number(m[2]);
       const k = ['pcs', 'ffP', 'lampPc'].indexOf(m[1]);
       if (k >= 0) return 10 + 4 * i + k;
-      return 200 + 4 * i + ['aluA', 'mux', 'ffA', 'lampA'].indexOf(m[1]);
+      if (!regsF) return 200 + 4 * i + ['aluA', 'mux', 'ffA', 'lampA'].indexOf(m[1]);
+      // разряд тракта данных регистровой машины: триггеры регистров, файл чтения, АЛУ, лампы
+      return 1000 + 64 * i + ({ aluA: 17, mux: 18 } as Record<string, number>)[m[1]];
     }
-    return { ctl: 100, clock: 101, resetLever: 102, data: 110, flags: 300 }[name] ?? 400;
+    if (rr) return 1000 + 64 * Number(rr[3]) + (rr[1] === 'ffR' ? 0 : 32) + Number(rr[2]);
+    if (rf) return rf[1] === 'rf' ? 1000 + 64 * Number(rf[2]) + 16 : 120 + Number(rf[2]);
+    return { ctl: 100, clock: 101, resetLever: 102, guard: 103, data: 110, flags: regsF ? 5000 : 300 }[name] ?? 6000;
   };
   plans.sort((a, b2) => rankOf(a.name) - rankOf(b2.name));
   const idx = new Map(plans.map((p, i) => [p.name, i]));
@@ -370,7 +441,8 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
   const X0 = Math.max(romW + 8, freeLeft * 3 + 40);
   const rom = buildRom(v, X0 - 8 - romW, 0, romOpts);
   const forcedX = (fx: Forced): number => ('out' in fx ? rom.outX[fx.out] : rom.addrX[fx.addr]);
-  const near = (x: number): boolean => [...rom.outX, ...rom.addrX].some((a) => Math.abs(a - x) <= 1);
+  // между приподнятыми магистралями нужно ≥ 3 клеток: «лестница» отвода (x+1, y=2) соседней цепи касается пыли магистрали по диагонали
+  const near = (x: number): boolean => [...rom.outX, ...rom.addrX].some((a) => Math.abs(a - x) <= 2);
   const leftXs: number[] = [];
   for (let x = X0 - 16; leftXs.length < freeLeft; x -= 3) if (!near(x)) leftXs.push(x);
   progress('Размещение карточек…');
@@ -409,6 +481,9 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     bus.add({ name: n.name, src, sinks, x: n.forced ? forcedX(n.forced) : undefined, zTop: n.zTop ? rom.addrBottom + 1 : undefined, wrapZ: wrapZOf.get(n.name) });
   }
   bus.build(v);
+  // самопроверка: провода разных цепей не должны касаться друг друга (иначе плата считает неверно, хотя блоки «по отдельности» исправны)
+  const shorts = findShorts(v);
+  if (shorts.length) throw new Error(`Короткое замыкание цепей на плате: ${shorts.slice(0, 5).map((x) => `${x.nets.join(' × ')} (${x.at.join(', ')})`).join('; ')}`);
 
   // ───── метки ─────
   const q = (name: string): XYZ => {
@@ -421,7 +496,8 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     reset: resetLever!,
     clockStop: clockInfo ? (clockInfo as { stop: XYZ }).stop : null,
     pc: Array.from({ length: P }, (_, i) => q(`ffP${i}`)),
-    a: plan.hasAlu ? Array.from({ length: D }, (_, i) => q(`ffA${i}`)) : [],
+    a: plan.hasAlu && !regsF ? Array.from({ length: D }, (_, i) => q(`ffA${i}`)) : [],
+    regs: new Map(regsF && plan.hasAlu ? regsF.list.map((r) => [r, Array.from({ length: D }, (_, i) => q(`ffR${r}_${i}`))] as [number, XYZ[]]) : []),
     flags: {},
     ram: new Map(),
     inputs: [],

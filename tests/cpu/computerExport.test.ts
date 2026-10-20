@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { gunzipSync } from 'fflate';
 import { newProject } from '../../src/computer/project';
+import { regProject } from './regProject';
 import { CONTAINERS, containerDef } from '../../src/cpu/export';
 import { ComputerBuildError, defaultExportSettings, exportComputer } from '../../src/cpu/computerExport';
 
@@ -53,6 +54,19 @@ describe('computer export', () => {
     const withLamps = exportComputer(p, { ...base, autoTiming: false, romFull: true, container: 'hopper' });
     expect(e.summary.blocks).toBeLessThan(withLamps.summary.blocks);
   });
+
+  it('register machine: schematic, registers in the guide, isa mode builds all registers', () => {
+    const p = regProject();
+    const e = exportComputer(p, { ...defaultExportSettings(), autoTiming: false });
+    expect(e.built.probes.regs.size).toBe(4);
+    expect(e.built.probes.a.length).toBe(0);
+    expect(e.docs).toContain('регистровый процессор');
+    expect(e.docs).toContain('регистр R3');
+    expect(e.summary.blocks).toBeGreaterThan(50000);
+    const full = exportComputer(p, { ...defaultExportSettings(), autoTiming: false, mode: 'isa' });
+    expect(full.built.probes.regs.size).toBe(4);
+    expect(full.summary.romBits).toBeGreaterThan(e.summary.romBits);
+  }, 600000);
 
   it('auto clock + isa mode build', () => {
     const p = newProject('acc4');

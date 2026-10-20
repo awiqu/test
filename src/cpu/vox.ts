@@ -27,6 +27,13 @@ const kindName = (k: K): string => KIND_NAMES[k as number] ?? String(k);
 export class Vox {
   private m = new Map<string, VCell>();
   tags = new Map<string, [number, number, number]>();
+  /** Пока задано, все новые клетки помечаются этим именем (какая цепь шины их поставила). */
+  owner: string | null = null;
+  private owners = new Map<string, string>();
+
+  ownerOf(x: number, y: number, z: number): string | undefined {
+    return this.owners.get(this.key(x, y, z));
+  }
 
   private key(x: number, y: number, z: number): string {
     return `${x},${y},${z}`;
@@ -54,6 +61,7 @@ export class Vox {
       return;
     }
     this.m.set(k, c);
+    if (this.owner) this.owners.set(k, this.owner);
   }
 
   /** Принудительная замена (для осознанных правок после сборки). */

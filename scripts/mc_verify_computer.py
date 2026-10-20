@@ -171,9 +171,13 @@ def main():
             if m is not None:
                 ram[int(m)] = bits(cells, rep_on)
         errs = []
+        for r, cells in ex.get('regs', {}).items():
+            got = bits(cells, dust_on)
+            if got != step['regs'][int(r)]:
+                errs.append(f'R{r} {got} != {step["regs"][int(r)]}')
         if pc != step['pc']:
             errs.append(f'PC {pc} != {step["pc"]}')
-        if a != step['a']:
+        if ex['a'] and a != step['a']:
             errs.append(f'A {a} != {step["a"]}')
         for f, v in flags.items():
             if int(v) != step['flags'].get(f, 0):

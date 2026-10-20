@@ -110,3 +110,26 @@ export function arrayFeeder(v: Vox, term: XYZ, rank: number, side: 'top' | 'bott
   groundPath(v, cells, { period: 9 });
   return { x: xWest, z: r, boost: kind === 'sink' };
 }
+
+/**
+ * Линия задержки: цепочка повторителей по 4 тика редстоуна, всего rt тиков. Нужна, чтобы замки ведущего и ведомого триггеров
+ * не открывались одновременно: зазор должен превышать разброс времени прихода замков на разные карточки.
+ */
+export function delayCard(v: Vox, name: string, x: number, z: number, rt: number): Card {
+  let left = Math.max(1, rt);
+  let n = 0;
+  v.dust(x - 1, 1, z);
+  while (left > 0) {
+    const d = Math.min(4, left);
+    v.repeater(x + n, 1, z, W, d);
+    left -= d;
+    n++;
+  }
+  v.dust(x + n, 1, z);
+  return { name, box: { x0: x - 2, x1: x + n + 1, z0: z - 1, z1: z + 1 }, west: { in: { x: x - 1, z, boost: false } }, east: { out: { x: x + n, z } } };
+}
+
+/** Сколько клеток в ширину занимает линия задержки на rt тиков. */
+export function delayCells(rt: number): number {
+  return Math.ceil(Math.max(1, rt) / 4);
+}

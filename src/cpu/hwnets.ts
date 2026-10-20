@@ -14,6 +14,17 @@ export interface Feat {
   used: Set<CtlName>;
   /** Флаги, которые читаются условиями перехода (для них строятся триггеры). */
   flags: FlagName[];
+  /** Регистровая архитектура: файл регистров (иначе — аккумулятор). */
+  regs?: RegFeat;
+}
+
+/** Файл регистров физического процессора: триггеры есть только у регистров, в которые пишут; остальные всегда равны нулю. */
+export interface RegFeat {
+  /** Номера регистров с триггерами. */
+  list: number[];
+  /** Для каких регистров есть столбцы выбора порта A / порта B в ПЗУ. */
+  readA: number[];
+  readB: number[];
 }
 
 const has = (f: Feat, ...names: CtlName[]): boolean => names.some((n) => f.used.has(n));
@@ -47,24 +58,18 @@ function tree(lines: string[], kind: 'OR' | 'AND' | 'NOR', names: string[], out:
  * Такты и замки: lkM — замок ведущих триггеров, lkS — ведомых; замок записи в A/флаги и «стоп» счётчика;
  * nwm — отрицательный импульс записи в ОЗУ (идёт только при weM).
  */
-export function ctlNetlist(guardRt = 3): string {
-  // «зазор» между фазами замков — задержка клока clkd: цепочка повторителей (по 4 тика редстоуна)
-  const chain: string[] = [];
-  let prev = 'clk';
-  let left = Math.max(1, guardRt);
-  let k = 0;
-  while (left > 0) {
-    const d = Math.min(4, left);
-    chain.push(`g${k} = BUF(${prev}, delay=${d})`);
-    prev = `g${k}`;
-    left -= d;
-    k++;
-  }
-  return `# Такты и замки: зазор между фазами ведущего и ведомого триггеров = ${guardRt} тиков редстоуна
-input clk reset nweA nweF halt weM
+export function ctlNetlist(regs?: number[]): string {
+  // регистровая архитектура: у каждого регистра свой замок записи вместо замка аккумулятора
+  const wr = regs?.map((r) => `nweR${r}`) ?? ['nweA'];
+  const lockLines = regs
+    ? regs.map((r) => `hR${r} = AND(nweR${r}, nreset)\nlkMR${r} = OR(lkM, hR${r})`).join('\n')
+    : 'hA = AND(nweA, nreset)\nlkMA = OR(lkM, hA)';
+  const lockOuts = regs ? regs.map((r) => `output lkMR${r} = lkMR${r}`).join('\n') : 'output lkMA = lkMA';
+  // clkd0 — такт, задержанный линией задержки «guard» (она ставится на плате отдельной карточкой): зазор между фазами замков
+  return `# Такты и замки: ведущий и ведомый триггеры не открыты одновременно за счёт задержанного такта clkd0
+input clk clkd0 reset ${wr.join(' ')} nweF halt weM
 nclk = NOT(clk)
-${chain.join('\n')}
-clkd = BUF(${prev}, delay=1)
+clkd = BUF(clkd0, delay=1)
 nclkd = NOT(clkd)
 lkM = OR(clk, clkd)
 lkS = OR(nclk, nclkd)
@@ -73,14 +78,13 @@ cw2 = BUF(cw1, delay=4)
 w = NOR(nclk, cw2)
 nreset = NOT(reset)
 hh = AND(halt, nreset)
-hA = AND(nweA, nreset)
+${lockLines}
 hF = AND(nweF, nreset)
-lkMA = OR(lkM, hA)
 lkMF = OR(lkM, hF)
 lkMP = OR(lkM, hh)
 wm = AND(w, weM, nreset)
 nwm = NOT(wm)
-output lkMA = lkMA
+${lockOuts}
 output lkMF = lkMF
 output lkMP = lkMP
 output lkS = lkS
@@ -93,11 +97,17 @@ output nreset = nreset
  * Разряд счётчика команд: следующее значение = reset ? 0 : take ? операнд : pc + 1 (перенос c — от младшего).
  * У младшего разряда переноса нет: прибавляется единица, поэтому s = ¬pc, а перенос дальше равен самому pc.
  */
-export function pcSliceNetlist(hasTake: boolean, first: boolean): string {
-  const L = ['# Разряд счётчика команд', `input pc ob${first ? '' : ' c'} nreset${hasTake ? ' take ntake' : ''}`];
+export function pcSliceNetlist(hasTake: boolean, first: boolean, hasJr = false): string {
+  const L = ['# Разряд счётчика команд', `input pc ob${first ? '' : ' c'} nreset${hasTake ? ' take ntake' : ''}${hasJr ? ' jReg ra' : ''}`];
   if (first) L.push('s = NOT(pc)', 'co = BUF(pc)');
   else L.push('s = XOR(pc, c)', 'co = AND(c, pc)');
-  if (hasTake) L.push('a = AND(take, ob)', 'b = AND(ntake, s)', 'm = OR(a, b)', 'd = AND(nreset, m)');
+  let tgt = 'ob';
+  if (hasJr) {
+    // переход по регистру: цель берётся с порта A файла регистров (в строках с таким переходом поле операнда нулевое)
+    L.push('oj = AND(jReg, ra)', 'tg = OR(ob, oj)');
+    tgt = 'tg';
+  }
+  if (hasTake) L.push(`a = AND(take, ${tgt})`, 'b = AND(ntake, s)', 'm = OR(a, b)', 'd = AND(nreset, m)');
   else L.push('d = AND(nreset, s)');
   L.push('output d = d', 'output co = co');
   return L.join('\n') + '\n';
@@ -119,6 +129,11 @@ export function aluANetlist(f: Feat): string {
     ins.push('uMem', 'mem');
     gates.push('x2 = AND(uMem, mem)');
     terms.push('x2');
+  }
+  if (has(f, 'uReg')) {
+    ins.push('uReg', 'rb');
+    gates.push('x3 = AND(uReg, rb)');
+    terms.push('x3');
   }
   if (has(f, 'k1')) {
     ins.push('k1');
@@ -293,4 +308,39 @@ export function takeNetlist(f: Feat): string {
   if (names.length === 1) out.push(`take = BUF(${names[0]})`);
   else tree(out, 'OR', names, 'take', 'q');
   return [`input ${ins.join(' ')}`, ...L, ...out, 'ntake = NOT(take)', 'output take = take', 'output ntake = ntake'].join('\n') + '\n';
+}
+
+/**
+ * Разряд файла регистров: чтение двух портов. На порту A (первый операнд, адрес, цель перехода) и порту B (второй операнд, данные записи)
+ * значение выбранного регистра получается как ИЛИ по регистрам из «регистр выбран И бит регистра»; выбор — по одному столбцу ПЗУ на регистр.
+ */
+export function rfBitNetlist(f: Feat): string {
+  const rf = f.regs!;
+  const ins: string[] = [];
+  const L: string[] = [];
+  const outs: string[] = [];
+  const port = (sel: 'selA' | 'selB', regs: number[], out: 'ra' | 'rb'): void => {
+    const rs = regs.filter((r) => rf.list.includes(r));
+    if (rs.length === 0) return;
+    const terms: string[] = [];
+    for (const r of rs) {
+      ins.push(`${sel}${r}`, `q${r}`);
+      L.push(`${out}${r} = AND(${sel}${r}, q${r})`);
+      terms.push(`${out}${r}`);
+    }
+    const o: string[] = [];
+    if (terms.length === 1) o.push(`${out} = BUF(${terms[0]})`);
+    else tree(o, 'OR', terms, out, `${out}t`);
+    L.push(...o);
+    outs.push(`output ${out} = ${out}`);
+  };
+  port('selA', rf.readA, 'ra');
+  port('selB', rf.readB, 'rb');
+  if (outs.length === 0) throw new Error('файл регистров без портов чтения');
+  return ['# Разряд файла регистров: чтение портов A и B', `input ${[...new Set(ins)].join(' ')}`, ...L, ...outs].join('\n') + '\n';
+}
+
+/** Адрес данных: поле операнда ПЗУ или регистр порта A (uAddrR). */
+export function amuxNetlist(): string {
+  return ['# Бит адреса данных: операнд или регистр', 'input ob uAddrR ra', 'x = AND(uAddrR, ra)', 'ad = OR(ob, x)', 'output ad = ad'].join('\n') + '\n';
 }

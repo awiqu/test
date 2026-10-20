@@ -1,9 +1,9 @@
 import { Block, ComputerSpec, FlagName, Instruction, JumpCond } from '../computer/types';
 import { decodeWord, layoutOf } from '../computer/isa';
-import { Expr, Stmt, parseRtl } from '../computer/rtl';
+import { Expr, LValue, Stmt, parseRtl } from '../computer/rtl';
 
 /**
- * Управление физического процессора (аккумуляторная архитектура).
+ * Управление физического процессора (аккумуляторная и регистровая архитектуры).
  * Каждая инструкция превращается в набор управляющих сигналов, которые хранятся в строке ПЗУ рядом с операндом:
  * дешифратора кода операции в железе нет — «микрокод» записывается заранее.
  */
@@ -34,6 +34,10 @@ export const CTL_NAMES = [
   'jNN',
   'jV',
   'jNV',
+  // регистровая архитектура: порты чтения файла регистров A (rd/первый операнд, адрес, цель перехода) и B (второй операнд, данные записи)
+  'uReg', // операнд B = регистр на порту B
+  'uAddrR', // адрес памяти = регистр на порту A (иначе — поле операнда)
+  'jReg', // цель перехода = регистр на порту A
 ] as const;
 export type CtlName = (typeof CTL_NAMES)[number];
 export type Ctl = Record<CtlName, boolean>;
@@ -46,10 +50,22 @@ export function emptyCtl(): Ctl {
 
 export type OperandField = 'imm' | 'addr' | 'target';
 
+/** Поля инструкции, которые выбирают регистры. */
+export type RegField = 'rd' | 'rs' | 'rt';
+
+/** Регистровая архитектура: какое поле выбирает регистр на порту A, на порту B и куда пишется результат. */
+export interface RegRoles {
+  a?: RegField;
+  b?: RegField;
+  w?: RegField;
+}
+
 export interface MicroInst {
   ctl: Ctl;
   /** Какое поле инструкции подаётся как операнд. */
   field: OperandField | null;
+  /** Регистровая архитектура: роли регистровых полей. */
+  regs?: RegRoles;
 }
 
 export interface MicroResult {
@@ -69,7 +85,16 @@ const COND_CTL: Record<JumpCond, { name: CtlName; flag?: FlagName; neg?: boolean
   NV: { name: 'jNV', flag: 'V', neg: true },
 };
 
-type Src = { kind: 'A' } | { kind: 'imm' } | { kind: 'const'; v: 0 | 1 } | { kind: 'mem' };
+type Src =
+  | { kind: 'A' }
+  | { kind: 'imm' }
+  | { kind: 'const'; v: 0 | 1 }
+  | { kind: 'mem' }
+  | { kind: 'reg'; f: RegField }
+  | { kind: 'memr'; f: RegField };
+
+const REG_RE = /^R\[(rd|rs|rt)\]$/;
+const MEMR_RE = /^M\[R\[(rd|rs|rt)\]\]$/;
 
 function parseSrc(s: string | undefined): Src | null {
   if (s === undefined) return null;
@@ -79,6 +104,10 @@ function parseSrc(s: string | undefined): Src | null {
   if (t === '0') return { kind: 'const', v: 0 };
   if (t === '1') return { kind: 'const', v: 1 };
   if (t === 'M[addr]' || t === 'M[imm]') return { kind: 'mem' };
+  let m = REG_RE.exec(t);
+  if (m) return { kind: 'reg', f: m[1] as RegField };
+  m = MEMR_RE.exec(t);
+  if (m) return { kind: 'memr', f: m[1] as RegField };
   return null;
 }
 
@@ -92,20 +121,35 @@ function fieldOfSrc(s: string): OperandField | null {
 
 // ───────────── RTL → блоки (для инструкций, написанных вручную) ─────────────
 
+const REG_FIELDS = ['rd', 'rs', 'rt'];
+
 function exprToSrc(e: Expr): string | null {
   switch (e.t) {
     case 'id':
       return e.name === 'A' || e.name === 'imm' || e.name === 'addr' ? e.name : null;
     case 'num':
       return e.v === 0 || e.v === 1 ? String(e.v) : null;
-    case 'idx':
-      return e.base === 'M' && e.index.t === 'id' && (e.index.name === 'addr' || e.index.name === 'imm') ? `M[${e.index.name}]` : null;
+    case 'idx': {
+      if (e.base === 'R') return e.index.t === 'id' && REG_FIELDS.includes(e.index.name) ? `R[${e.index.name}]` : null;
+      if (e.index.t === 'id' && (e.index.name === 'addr' || e.index.name === 'imm')) return `M[${e.index.name}]`;
+      const r = exprToSrc(e.index);
+      return r !== null && REG_RE.test(r) ? `M[${r}]` : null;
+    }
     case 'call':
       return e.name === 'sext' && e.args.length === 1 && e.args[0].t === 'id' && e.args[0].name === 'imm' ? 'imm' : null;
     default:
       return null;
   }
 }
+
+/** Приёмник присваивания: A (аккумулятор) или R[rd|rs|rt]. */
+function dstOf(t: LValue): string | null {
+  if (t.k === 'name' && t.name === 'A') return 'A';
+  if (t.k === 'R' && t.index.t === 'id' && REG_FIELDS.includes(t.index.name)) return `R[${t.index.name}]`;
+  return null;
+}
+
+const isOperandReg = (x: string | null): x is string => x === 'A' || (x !== null && REG_RE.test(x));
 
 const BIN_OPS: Record<string, 'ADD' | 'SUB' | 'AND' | 'OR' | 'XOR'> = { '+': 'ADD', '-': 'SUB', '&': 'AND', '|': 'OR', '^': 'XOR' };
 const CALL_OPS: Record<string, 'ADD' | 'SUB' | 'AND' | 'OR' | 'XOR' | 'NOT' | 'SHL' | 'SHR' | 'INC' | 'DEC'> = {
@@ -139,7 +183,7 @@ function lowerStmt(s: Stmt, out: Block[]): string | null {
       else if (s.name === 'sub' && s.args.length === 2) {
         const a = exprToSrc(s.args[0]);
         const b = exprToSrc(s.args[1]);
-        if (a !== 'A' || b === null) return 'сравнение: поддерживается sub(A, операнд)';
+        if (!isOperandReg(a) || b === null) return 'сравнение: поддерживается sub(A или R[..], операнд)';
         out.push({ kind: 'cmp', a, b });
       } else return `вызов ${s.name}() в физическом процессоре не поддерживается`;
       return null;
@@ -160,46 +204,49 @@ function lowerStmt(s: Stmt, out: Block[]): string | null {
     case 'assign': {
       const t = s.target;
       if (t.k === 'name' && t.name === 'PC' && s.op === '=') {
-        const src = s.e.t === 'id' && (s.e.name === 'target' || s.e.name === 'addr' || s.e.name === 'imm') ? s.e.name : null;
-        if (!src) return 'PC можно присвоить только значение поля target/addr/imm';
+        const src = s.e.t === 'id' && ['target', 'addr', 'imm'].includes(s.e.name) ? s.e.name : exprToSrc(s.e);
+        if (!src || !(['target', 'addr', 'imm'].includes(src) || REG_RE.test(src))) return 'PC можно присвоить только значение поля target/addr/imm или регистр R[..]';
         out.push({ kind: 'jump', target: src, cond: 'always' });
         return null;
       }
       if (t.k === 'M' && s.op === '=') {
-        const ix = t.index.t === 'id' && (t.index.name === 'addr' || t.index.name === 'imm') ? t.index.name : null;
-        if (!ix || !s.e || exprToSrc(s.e) !== 'A') return 'запись в память: M[addr] = A';
-        out.push({ kind: 'store', addr: ix, src: 'A' });
+        const ix = exprToSrc({ t: 'idx', base: 'M', index: t.index });
+        const data = exprToSrc(s.e);
+        if (!ix || !isOperandReg(data)) return 'запись в память: M[addr] = A или M[addr] = R[..]';
+        out.push({ kind: 'store', addr: ix.slice(2, -1), src: data });
         return null;
       }
-      if (t.k === 'name' && t.name === 'A') {
+      const dst = dstOf(t);
+      if (dst !== null) {
+        const self: Expr = dst === 'A' ? { t: 'id', name: 'A', line: 0, col: 0 } : { t: 'idx', base: 'R', index: (t as { index: Expr }).index };
         let e = s.e;
         let opFromAssign: string | null = null;
         if (s.op !== '=') {
           opFromAssign = s.op.slice(0, -1);
           if (opFromAssign !== '<<' && opFromAssign !== '>>' && !BIN_OPS[opFromAssign]) return `операция ${s.op} не поддерживается`;
-          e = { t: 'bin', op: opFromAssign, l: { t: 'id', name: 'A', line: 0, col: 0 }, r: s.e } as Expr;
+          e = { t: 'bin', op: opFromAssign, l: self, r: s.e } as Expr;
         }
         const src = exprToSrc(e);
         if (src !== null) {
-          if (src.startsWith('M[')) out.push({ kind: 'load', dst: 'A', addr: src.slice(2, -1) });
-          else if (src === 'A') out.push({ kind: 'nop' });
-          else out.push({ kind: 'move', dst: 'A', src });
+          if (src.startsWith('M[')) out.push({ kind: 'load', dst, addr: src.slice(2, -1) });
+          else if (src === dst) out.push({ kind: 'nop' });
+          else out.push({ kind: 'move', dst, src });
           return null;
         }
-        if (e.t === 'un' && e.op === '~' && exprToSrc(e.e) === 'A') {
-          out.push({ kind: 'alu', op: 'NOT', dst: 'A', a: 'A', flags: false });
+        if (e.t === 'un' && e.op === '~' && isOperandReg(exprToSrc(e.e))) {
+          out.push({ kind: 'alu', op: 'NOT', dst, a: exprToSrc(e.e)!, flags: false });
           return null;
         }
         if (e.t === 'bin') {
           const l = exprToSrc(e.l);
           const r = exprToSrc(e.r);
-          if (l === 'A' && (e.op === '<<' || e.op === '>>') && e.r.t === 'num' && e.r.v === 1) {
-            out.push({ kind: 'alu', op: e.op === '<<' ? 'SHL' : 'SHR', dst: 'A', a: 'A', flags: false });
+          if (isOperandReg(l) && (e.op === '<<' || e.op === '>>') && e.r.t === 'num' && e.r.v === 1) {
+            out.push({ kind: 'alu', op: e.op === '<<' ? 'SHL' : 'SHR', dst, a: l, flags: false });
             return null;
           }
           const op = BIN_OPS[e.op];
-          if (op && l === 'A' && r !== null) {
-            out.push({ kind: 'alu', op, dst: 'A', a: 'A', b: r, flags: false });
+          if (op && isOperandReg(l) && r !== null) {
+            out.push({ kind: 'alu', op, dst, a: l, b: r, flags: false });
             return null;
           }
         }
@@ -207,15 +254,15 @@ function lowerStmt(s: Stmt, out: Block[]): string | null {
           const op = CALL_OPS[e.name];
           const unary = ['NOT', 'SHL', 'SHR', 'INC', 'DEC'].includes(op);
           const a = exprToSrc(e.args[0]);
-          if (a !== 'A') return `${e.name}(): первый аргумент должен быть A`;
+          if (!isOperandReg(a)) return `${e.name}(): первый аргумент должен быть A или R[..]`;
           if (unary) {
             if (e.args.length !== 1) return `${e.name}() с несколькими аргументами не поддерживается`;
-            out.push({ kind: 'alu', op, dst: 'A', a: 'A', flags: true });
+            out.push({ kind: 'alu', op, dst, a, flags: true });
             return null;
           }
           const b = e.args[1] ? exprToSrc(e.args[1]) : null;
-          if (e.args.length !== 2 || b === null) return `${e.name}(A, X): X — imm, M[addr], 0 или 1`;
-          out.push({ kind: 'alu', op, dst: 'A', a: 'A', b, flags: true });
+          if (e.args.length !== 2 || b === null) return `${e.name}(A, X): X — imm, M[addr], 0, 1 или регистр`;
+          out.push({ kind: 'alu', op, dst, a, b, flags: true });
           return null;
         }
         return 'выражение не распознано физическим процессором';
@@ -250,6 +297,8 @@ function condCtl(cond: JumpCond, spec: ComputerSpec, ctl: Ctl): void {
 
 export function controlFromBlocks(blocks: Block[], spec: ComputerSpec): MicroResult {
   const ctl = emptyCtl();
+  const acc = spec.arch === 'accumulator';
+  const roles: RegRoles = {};
   let field: OperandField | null = null;
   const useField = (s: string): string | null => {
     const f = fieldOfSrc(s);
@@ -259,9 +308,58 @@ export function controlFromBlocks(blocks: Block[], spec: ComputerSpec): MicroRes
     }
     return null;
   };
+  /** Закрепляет регистровое поле за портом: порт A, порт B или запись. */
+  const useReg = (role: keyof RegRoles, f: RegField): string | null => {
+    if (roles[role] && roles[role] !== f) {
+      const port = role === 'w' ? 'записи' : `чтения ${role.toUpperCase()}`;
+      return `на порту ${port} нужны два разных регистра (${roles[role]} и ${f}) — в одном такте это невозможно`;
+    }
+    roles[role] = f;
+    return null;
+  };
   const real = blocks.filter((b) => b.kind !== 'nop');
   if (real.length > 1) return { error: 'в одной инструкции несколько действий — физический процессор выполняет одно действие за такт' };
-  if (spec.arch !== 'accumulator') return { error: 'физическая постройка пока поддерживает только аккумуляторную архитектуру' };
+  /** Приёмник результата: A (аккумулятор) или R[..] (запись в регистр). */
+  const dest = (text: string): string | null => {
+    const d = parseSrc(text);
+    if (acc) return d?.kind === 'A' ? null : 'запись допускается только в аккумулятор A';
+    if (d?.kind !== 'reg') return 'запись допускается только в регистр R[rd|rs|rt]';
+    return useReg('w', d.f);
+  };
+  /** Первый операнд АЛУ/сравнения. */
+  const firstOperand = (text: string): string | null => {
+    const d = parseSrc(text);
+    if (acc) return d?.kind === 'A' ? null : 'первый операнд АЛУ должен быть A';
+    if (d?.kind !== 'reg') return 'первый операнд АЛУ должен быть регистром R[rd|rs|rt]';
+    return useReg('a', d.f);
+  };
+  /** Второй операнд / источник: число, константа, память или регистр. */
+  const sourceOperand = (text: string): string | null => {
+    const src = parseSrc(text);
+    if (!src || src.kind === 'A') return `источник «${text}» не поддерживается`;
+    const e = useField(text);
+    if (e) return e;
+    switch (src.kind) {
+      case 'imm':
+        ctl.uImm = true;
+        return null;
+      case 'mem':
+        ctl.uMem = true;
+        return null;
+      case 'const':
+        if (src.v === 1) ctl.k1 = true;
+        return null;
+      case 'reg':
+        if (acc) return `регистр «${text}» есть только в регистровой архитектуре`;
+        ctl.uReg = true;
+        return useReg('b', src.f);
+      case 'memr':
+        if (acc) return `адрес в регистре «${text}» возможен только в регистровой архитектуре`;
+        ctl.uMem = true;
+        ctl.uAddrR = true;
+        return useReg('a', src.f);
+    }
+  };
   for (const b of real) {
     switch (b.kind) {
       case 'halt':
@@ -269,44 +367,53 @@ export function controlFromBlocks(blocks: Block[], spec: ComputerSpec): MicroRes
         break;
       case 'move':
       case 'load': {
-        if (b.dst !== 'A') return { error: 'запись допускается только в аккумулятор A' };
+        const e1 = dest(b.dst);
+        if (e1) return { error: e1 };
         const srcText = b.kind === 'move' ? b.src : `M[${b.addr}]`;
-        const src = parseSrc(srcText);
-        if (!src || src.kind === 'A') return { error: `источник «${srcText}» не поддерживается` };
-        const e = useField(srcText);
-        if (e) return { error: e };
-        if (src.kind === 'imm') ctl.uImm = true;
-        else if (src.kind === 'mem') ctl.uMem = true;
-        else if (src.v === 1) ctl.k1 = true;
+        const e2 = sourceOperand(srcText);
+        if (e2) return { error: e2 };
         ctl.eB = true;
         ctl.weA = true;
         break;
       }
       case 'store': {
-        if (parseSrc(b.src)?.kind !== 'A') return { error: 'в память можно записать только A' };
+        const data = parseSrc(b.src);
+        if (acc) {
+          if (data?.kind !== 'A') return { error: 'в память можно записать только A' };
+        } else if (data?.kind !== 'reg') return { error: 'в память можно записать только регистр R[rd|rs|rt]' };
+        else {
+          const e = useReg('b', data.f);
+          if (e) return { error: e };
+        }
         const addr = parseSrc(`M[${b.addr}]`);
-        if (!addr) return { error: `адрес «${b.addr}» не поддерживается (нужен addr или imm)` };
-        const e = useField(`M[${b.addr}]`);
-        if (e) return { error: e };
+        if (!addr || (addr.kind !== 'mem' && addr.kind !== 'memr')) return { error: `адрес «${b.addr}» не поддерживается (нужен addr, imm или регистр)` };
+        if (addr.kind === 'memr') {
+          if (acc) return { error: 'адрес в регистре возможен только в регистровой архитектуре' };
+          ctl.uAddrR = true;
+          const e = useReg('a', addr.f);
+          if (e) return { error: e };
+        } else {
+          const e = useField(`M[${b.addr}]`);
+          if (e) return { error: e };
+        }
         ctl.weM = true;
         break;
       }
       case 'alu':
       case 'cmp': {
-        const aText = b.kind === 'alu' ? b.a : b.a;
-        if (parseSrc(aText)?.kind !== 'A') return { error: 'первый операнд АЛУ должен быть A' };
-        if (b.kind === 'alu' && b.dst !== 'A') return { error: 'результат АЛУ допускается только в A' };
+        const e0 = firstOperand(b.a);
+        if (e0) return { error: e0 };
+        if (b.kind === 'alu') {
+          const ed = dest(b.dst);
+          if (ed) return { error: ed };
+        }
         const op = b.kind === 'alu' ? b.op : 'SUB';
         const unary = ['NOT', 'SHL', 'SHR'].includes(op);
         if (!['ADD', 'SUB', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR', 'INC', 'DEC'].includes(op)) return { error: `операция ${op} в физическом АЛУ не поддерживается` };
         if (op !== 'INC' && op !== 'DEC' && !unary) {
-          const src = parseSrc(b.b);
-          if (!src || src.kind === 'A') return { error: `второй операнд «${b.b ?? ''}» не поддерживается` };
-          const e = useField(b.b!);
+          if (b.b === undefined) return { error: `второй операнд не задан` };
+          const e = sourceOperand(b.b);
           if (e) return { error: e };
-          if (src.kind === 'imm') ctl.uImm = true;
-          else if (src.kind === 'mem') ctl.uMem = true;
-          else if (src.v === 1) ctl.k1 = true;
         } else if (b.b !== undefined && !unary) {
           return { error: `${op} не принимает второй операнд` };
         }
@@ -330,9 +437,17 @@ export function controlFromBlocks(blocks: Block[], spec: ComputerSpec): MicroRes
       }
       case 'jump': {
         if (b.relative) return { error: 'относительные переходы не поддерживаются' };
-        if (!['target', 'addr', 'imm'].includes(b.target)) return { error: `цель перехода «${b.target}» не поддерживается` };
-        const e = useField(b.target);
-        if (e) return { error: e };
+        const t = parseSrc(b.target);
+        if (t?.kind === 'reg') {
+          if (acc) return { error: 'переход по регистру возможен только в регистровой архитектуре' };
+          ctl.jReg = true;
+          const e = useReg('a', t.f);
+          if (e) return { error: e };
+        } else {
+          if (!['target', 'addr', 'imm'].includes(b.target)) return { error: `цель перехода «${b.target}» не поддерживается` };
+          const e = useField(b.target);
+          if (e) return { error: e };
+        }
         condCtl(b.cond, spec, ctl);
         break;
       }
@@ -340,7 +455,7 @@ export function controlFromBlocks(blocks: Block[], spec: ComputerSpec): MicroRes
         return { error: `блок «${b.kind}» (стек, пропуск и т.п.) физический процессор не выполняет` };
     }
   }
-  return { micro: { ctl, field } };
+  return { micro: { ctl, field, regs: acc ? undefined : roles } };
 }
 
 export function deriveControl(inst: Instruction, spec: ComputerSpec): MicroResult {
@@ -360,6 +475,8 @@ export interface MicroRow {
   /** Значение поля операнда (0, если у инструкции нет операнда). */
   ob: number;
   ctl: Ctl;
+  /** Регистровая архитектура: номера регистров на порту A, порту B и приёмника результата. */
+  regs?: { a?: number; b?: number; w?: number };
   mnemonic: string;
   text: string;
 }
@@ -419,7 +536,22 @@ export function expandRom(words: number[], size: number, spec: ComputerSpec, isa
       ob = v;
       operandBits = Math.max(operandBits, fieldWidth(field, spec));
     }
-    rows.push({ address: a, ob, ctl: { ...r.micro.ctl }, mnemonic: d.inst.mnemonic, text: disasm ? disasm(word) : d.inst.mnemonic });
+    let regs: MicroRow['regs'];
+    if (r.micro.regs) {
+      regs = {};
+      let bad = false;
+      for (const role of ['a', 'b', 'w'] as const) {
+        const f = r.micro.regs[role];
+        if (!f) continue;
+        const v = d.fields[f];
+        if (v === undefined) {
+          errors.push(`Адрес ${a}: ${d.inst.mnemonic} — в формате инструкции нет поля «${f}»`);
+          bad = true;
+        } else regs[role] = v & (spec.regCount - 1);
+      }
+      if (bad) continue;
+    }
+    rows.push({ address: a, ob, ctl: { ...r.micro.ctl }, regs, mnemonic: d.inst.mnemonic, text: disasm ? disasm(word) : d.inst.mnemonic });
   }
   return { rows, errors, operandBits };
 }
@@ -428,7 +560,10 @@ export function expandRom(words: number[], size: number, spec: ComputerSpec, isa
 
 export interface MicroState {
   pc: number;
+  /** Аккумулятор (аккумуляторная архитектура). */
   a: number;
+  /** Файл регистров (регистровая архитектура). */
+  regs: number[];
   flags: Record<FlagName, number>;
   ram: number[];
   halted: boolean;
@@ -436,7 +571,8 @@ export interface MicroState {
 
 /**
  * Модель тракта данных «в уравнениях» — повторяет то, что считает построенная схема:
- * B = (uImm ? ob : 0) | (uMem ? mem : 0) | k1;  Bx = B ^ sub;  сумма с переносом sub; результат — выбор по e*.
+ * B = (uImm ? ob : 0) | (uMem ? mem : 0) | (uReg ? порт B : 0) | k1;  Bx = B ^ sub;  сумма с переносом sub; результат — выбор по e*.
+ * Регистровая архитектура: первый операнд и адрес/цель перехода — порт A, второй операнд и данные записи — порт B.
  */
 export class MicroMachine {
   state: MicroState;
@@ -447,7 +583,7 @@ export class MicroMachine {
     readonly write: (addr: number, v: number, st: MicroState) => void,
     ramWords: number,
   ) {
-    this.state = { pc: 0, a: 0, flags: { Z: 0, C: 0, N: 0, V: 0 }, ram: new Array(ramWords).fill(0), halted: false };
+    this.state = { pc: 0, a: 0, regs: new Array(Math.max(1, spec.regCount)).fill(0), flags: { Z: 0, C: 0, N: 0, V: 0 }, ram: new Array(ramWords).fill(0), halted: false };
   }
 
   step(): void {
@@ -457,17 +593,22 @@ export class MicroMachine {
     const row = this.rows[st.pc];
     const m = 2 ** spec.dataBits - 1;
     const W = spec.dataBits;
+    const pcMask = 2 ** spec.pcBits - 1;
     if (!row) {
       // за концом программы строк нет: сигналы нулевые, счётчик идёт дальше
-      st.pc = (st.pc + 1) & (2 ** spec.pcBits - 1);
+      st.pc = (st.pc + 1) & pcMask;
       return;
     }
     const c = row.ctl;
-    const mem = c.uMem ? this.read(row.ob, st) & m : 0;
-    const b0 = ((c.uImm ? row.ob & m : 0) | mem | (c.k1 ? 1 : 0)) & m;
+    const reg = spec.arch === 'register';
+    const portA = reg ? (row.regs?.a !== undefined ? st.regs[row.regs.a] : 0) : st.a;
+    const portB = reg && row.regs?.b !== undefined ? st.regs[row.regs.b] : 0;
+    const addr = c.uAddrR ? portA & (2 ** spec.ramAddrBits - 1) : row.ob;
+    const mem = c.uMem ? this.read(addr, st) & m : 0;
+    const b0 = ((c.uImm ? row.ob & m : 0) | mem | (c.uReg ? portB : 0) | (c.k1 ? 1 : 0)) & m;
     const bx = c.sub ? ~b0 & m : b0;
     const cin = c.sub ? 1 : 0;
-    const a = st.a;
+    const a = portA;
     const full = a + bx + cin;
     const sum = full & m;
     const cout = full > m ? 1 : 0;
@@ -502,12 +643,17 @@ export class MicroMachine {
       if (spec.flags.includes('N')) st.flags.N = nn;
       if (spec.flags.includes('V')) st.flags.V = nv;
     }
-    if (c.weM) this.write(row.ob, a, st);
-    if (c.weA) st.a = r;
+    if (c.weM) this.write(addr, reg ? portB : a, st);
+    if (c.weA) {
+      if (reg) {
+        if (row.regs?.w !== undefined) st.regs[row.regs.w] = r;
+      } else st.a = r;
+    }
     if (c.halt) {
       st.halted = true;
       return;
     }
-    st.pc = taken ? row.ob & (2 ** spec.pcBits - 1) : (st.pc + 1) & (2 ** spec.pcBits - 1);
+    const target = c.jReg ? portA & pcMask : row.ob & pcMask;
+    st.pc = taken ? target : (st.pc + 1) & pcMask;
   }
 }
