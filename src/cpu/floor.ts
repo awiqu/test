@@ -572,6 +572,7 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
         }
       }
     }
+    opts.progress?.(`  не проложено цепей: ${failed.length}${failed.length ? ` (${failed.slice(0, 4).join('; ')})` : ''}`);
     if (failed.length === 0) finalStates = order;
     else if (failed.length < bestFail.length || bestFail.length === 0) bestFail = failed;
     if (!finalStates && tries === attempts - 1) {
