@@ -69,8 +69,11 @@
 | ![](docs/screenshots/10-computers-spec.png) | ![](docs/screenshots/12-computers-isa.png) |
 | **Симулятор с экраном** | **ПЗУ из бочек** |
 | ![](docs/screenshots/15-computers-simulator-hello.png) | ![](docs/screenshots/17-computers-rom-iso.png) |
+| **Постройка ПК: карта платы** | **Постройка ПК: план** |
+| ![](docs/screenshots/24-computers-build.png) | ![](docs/screenshots/25-computers-build-plan.png) |
 
 Подробно о форматах для ИИ — [`docs/ai/README.md`](docs/ai/README.md). Пример ПЗУ: [`docs/examples/rom_example.litematic`](docs/examples/rom_example.litematic).
+Готовый компьютер («Счётчик», 4 бита, бочки): [`docs/examples/computer_counter.litematic`](docs/examples/computer_counter.litematic) и его руководство [`computer_counter.md`](docs/examples/computer_counter.md).
 
 > **Границы постройки.** Физически строится аккумуляторная архитектура (один регистр A, ПЗУ-программа, ОЗУ и порты); стек и регистровые
 > архитектуры пока только в симуляторе. Плата большая и протяжённая (для 4-битного компьютера около 400×1000 блоков), поэтому один такт

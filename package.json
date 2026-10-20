@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "build:single": "tsc --noEmit && vite build --config vite.single.config.ts",
     "verify:mc": "DUMP=1 vitest run tests/dump.test.ts && python3 scripts/mc_verify.py",
-    "e2e": "node scripts/e2e.mjs && node scripts/e2e-computers.mjs",
+    "e2e": "node scripts/e2e.mjs && node scripts/e2e-computers.mjs && node scripts/e2e-build.mjs",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {

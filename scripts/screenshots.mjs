@@ -143,6 +143,19 @@ await page.locator('.cs-docs-nav button', { hasText: 'Язык RTL' }).click();
 await page.waitForTimeout(200);
 await page.screenshot({ path: `${OUT}/21-computers-ai-docs.png` });
 
+// постройка ПК (нужна аккумуляторная заготовка — переключаем в самом конце вкладки)
+await step('Характеристики');
+await page.locator('.cs-card', { hasText: 'Мини-4' }).click();
+await step('Постройка ПК');
+await page.click('button:has-text("Построить компьютер")');
+await page.waitForSelector('.result-bar .stats', { timeout: 300000 });
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${OUT}/24-computers-build.png` });
+await page.click('.preview-bar button:has-text("План")');
+await page.waitForSelector('.preview-stage canvas');
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${OUT}/25-computers-build-plan.png` });
+
 // схемы из текста
 await page.click('.mode-tabs button:has-text("Схемы")');
 await page.waitForTimeout(300);
