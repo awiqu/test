@@ -2,13 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { newProject } from '../../src/computer/project';
 import { assemble } from '../../src/computer/asm';
 import { Machine } from '../../src/computer/sim';
-import { buildPresetIsa } from '../../src/computer/isa';
-import { defaultSpec } from '../../src/computer/spec';
 import { ComputerProject } from '../../src/computer/types';
 import { BuildMode, planComputer } from '../../src/cpu/plan';
 import { Built, BuildSettings, defaultBuildSettings } from '../../src/cpu/computer';
 import { buildTimed } from '../../src/cpu/timing';
 import { TickSim } from '../../src/cpu/tick';
+import { richProject } from './richProject';
 
 const log = (s: string) => process.stderr.write(s + '\n');
 type XYZ = [number, number, number];
@@ -98,37 +97,8 @@ describe('physical computer = emulator (tick simulator)', () => {
   }, 1800000);
 
   it('richer ISA: arithmetic, logic, shifts, flags and jumps', () => {
-    const spec = { ...defaultSpec('acc4'), opcodeBits: 5, instrBits: 10, pcBits: 5, romWords: 32, devices: [] as never[], ramAddrBits: 4, ramWords: 16, aluOps: ['ADD', 'SUB', 'AND', 'OR', 'XOR', 'NOT', 'SHL', 'SHR', 'INC', 'DEC'] as never[], flags: ['Z', 'C', 'N', 'V'] as never[] };
-    const p = newProject('acc4');
-    p.spec = spec;
-    p.instructions = buildPresetIsa(spec).instructions.filter((i) => !i.mnemonic.startsWith('BR') && i.mnemonic !== 'JMPR');
-    log('ISA: ' + p.instructions.map((i) => i.mnemonic).join(' '));
-    const src = `
-        ldi 11
-        sta 0
-        ldi 6
-        sta 1
-        lda 0
-        add 1
-        jc  carry
-        ldi 0
-carry:  sta 2
-        lda 0
-        sub 1
-        sta 3
-        lda 0
-        and 1
-        or  1
-        xor 0
-        not
-        shl
-        shr
-        sta 4
-        lda 1
-loop:   sub 2
-        jnz loop
-        hlt
-`;
-    expect(physicalVsEmulator(p, src, { cycles: 40 })).toBeNull();
+    const { project, source } = richProject();
+    log('ISA: ' + project.instructions.map((i) => i.mnemonic).join(' '));
+    expect(physicalVsEmulator(project, source, { cycles: 40 })).toBeNull();
   }, 3600000);
 });
