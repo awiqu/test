@@ -4,6 +4,7 @@ import { BuildMode, planComputer } from '../../cpu/plan';
 import { CONTAINERS, ContainerKind, containerDef } from '../../cpu/export';
 import { ComputerExportSettings, defaultExportSettings } from '../../cpu/computerExport';
 import { BuildOutput } from '../../cpu/buildResult';
+import { boardFit } from '../../cpu/fit';
 import { GATE_VARIANTS } from '../../compiler/variants';
 import { blockCss } from '../../compiler/materials';
 import { saveFile } from '../../storage/project';
@@ -190,6 +191,21 @@ export function BuildStep() {
             )}
           </Section>
 
+          <Section title="Раскладка платы">
+            <div className="field">
+              <span>Как расположить узлы</span>
+              <div className="seg" role="group" aria-label="Раскладка платы">
+                <button className={settings.layout === 'compact' ? 'on' : ''} onClick={() => set({ layout: 'compact' })}>Компактная</button>
+                <button className={settings.layout === 'stack' ? 'on' : ''} onClick={() => set({ layout: 'stack' })}>Колонкой</button>
+              </div>
+              <small className="dim">
+                {settings.layout === 'compact'
+                  ? 'Узлы плотно на плоскости, провода идут поверх них в нескольких слоях: плата в разы меньше и помещается в дальность прорисовки. Если разводка не получится, будет использована раскладка колонкой.'
+                  : 'Узлы стоят колонкой, шина идёт сбоку по земле: проверенная, но очень длинная плата (сотни блоков в длину).'}
+              </small>
+            </div>
+          </Section>
+
           <Section title="Вентили блоков логики">
             <details className="cs-howto">
               <summary>Выбор реализации вентилей (АЛУ, счётчик, управление)</summary>
@@ -246,6 +262,7 @@ export function BuildStep() {
             <div className="result-bar">
               {build.mainThread && <div className="badge warn">Расчёт шёл в основном потоке (воркер недоступен), поэтому страница могла замереть.</div>}
               <Stats out={result} seconds={build.elapsed / 1000} />
+              <FitNote out={result} wanted={settings.layout} />
               <div className="result-actions">
                 <button className="btn" onClick={() => void save(result.fileName.replace(/\.litematic$/, '.md'), result.docs, 'text/markdown')}>Руководство .md</button>
                 <button className="btn primary big" onClick={() => void save(result.fileName, result.bytes, 'application/octet-stream')}>Скачать .litematic</button>
@@ -273,6 +290,18 @@ export function BuildStep() {
   );
 }
 
+/** Помещается ли плата в дальность прорисовки/симуляции игры и не откатилась ли компактная раскладка. */
+function FitNote({ out, wanted }: { out: BuildOutput; wanted: 'compact' | 'stack' }) {
+  const s = out.summary;
+  const fit = boardFit(s.size);
+  return (
+    <>
+      {wanted === 'compact' && s.layout === 'stack' && <div className="badge warn">Компактная раскладка не получилась — использована запасная (колонкой), плата длиннее.</div>}
+      {fit.level === 'ok' ? <small className="dim">{fit.text}</small> : <div className={`badge ${fit.level === 'warn' ? 'warn' : 'bad'}`}>{fit.text}</div>}
+    </>
+  );
+}
+
 function Stats({ out, seconds }: { out: BuildOutput; seconds: number }) {
   const s = out.summary;
   return (
@@ -284,6 +313,7 @@ function Stats({ out, seconds }: { out: BuildOutput; seconds: number }) {
       <div><b>{fmt(s.romItems)}</b><span>предметов</span></div>
       {s.halfPeriod !== undefined && <div><b>{s.halfPeriod}</b><span>игр. тиков на фазу CLK</span></div>}
       <div><b>{s.guardRt}</b><span>зазор, тиков RS</span></div>
+      <div><b>{s.layout === 'compact' ? `компактная, ${s.layers} сл.` : 'колонкой'}</b><span>раскладка</span></div>
       <div><b>{seconds.toFixed(1)} с</b><span>расчёт</span></div>
     </div>
   );

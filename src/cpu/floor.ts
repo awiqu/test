@@ -36,6 +36,8 @@ export interface FloorStats {
   wireCells: number;
   repeaters: number;
   vias: number;
+  /** Сколько слоёв проводов использовано. */
+  layers: number;
   attempts: number;
   size: { x: number; z: number; y: number };
   ms: number;
@@ -773,6 +775,7 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
     wireCells,
     repeaters,
     vias,
+    layers: NL,
     attempts: tries,
     size: { x: nb.x1 - nb.x0 + 1, z: nb.z1 - nb.z0 + 1, y: nb.y1 - nb.y0 + 1 },
     ms: Math.round(performance.now() - t0),

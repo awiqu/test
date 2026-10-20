@@ -4,6 +4,7 @@ import { ComputerProject } from '../computer/types';
 import { buildLitematic, safeFileName } from '../export/litematic';
 import { BuildSettings, Built, ClockKind, buildComputer, defaultBuildSettings } from './computer';
 import { ContainerKind, DEFAULT_ROM_ITEM, containerDef, voxToStructure } from './export';
+import { boardFit } from './fit';
 import { macroSettings } from './macro';
 import { BuildMode, Plan, planComputer } from './plan';
 import { LockTiming, TimedBuild, buildTimed } from './timing';
@@ -35,6 +36,8 @@ export interface ComputerExportSettings {
   /** Подбирать зазор между фазами замков по замеру в симуляторе (рекомендуется). */
   autoTiming: boolean;
   guardRt: number;
+  /** Раскладка платы: compact — узлы плотно, провода поверх; stack — запасная, узлы колонкой и шина сбоку. */
+  layout: 'compact' | 'stack';
   name: string;
   author: string;
   description: string;
@@ -57,6 +60,7 @@ export function defaultExportSettings(): ComputerExportSettings {
     portLamps: b.portLamps,
     autoTiming: true,
     guardRt: b.guardRt,
+    layout: b.layout ?? 'compact',
     name: 'Redstone Computer',
     author: 'RedLogic',
     description: 'Компьютер, собранный в RedLogic',
@@ -72,6 +76,7 @@ export function buildSettingsOf(s: ComputerExportSettings): BuildSettings {
     clock: s.clock,
     clockHalfTicks: s.clockHalfTicks,
     guardRt: s.guardRt,
+    layout: s.layout,
   };
 }
 
@@ -92,6 +97,9 @@ export interface ComputerSummary {
   guardRt: number;
   halfPeriod?: number;
   buildMs: number;
+  /** Раскладка, которая получилась (компактная может откатиться), и число слоёв проводов. */
+  layout: 'compact' | 'stack';
+  layers: number;
 }
 
 export interface ComputerExport {
@@ -149,6 +157,8 @@ export function exportComputer(project: ComputerProject, s: ComputerExportSettin
     guardRt: timed?.guardRt ?? s.guardRt,
     halfPeriod: timed?.halfPeriod,
     buildMs: Math.round(performance.now() - t0),
+    layout: built.stats.layout,
+    layers: built.stats.layers,
   };
   const fileName = `${safeFileName(s.name)}_${safeFileName(plan.programName)}.litematic`;
   progress('Руководство…');
@@ -181,6 +191,8 @@ export function computerDocs(plan: Plan, built: Built, s: ComputerExportSettings
     L.push(`- Архитектура: однотактовый регистровый процессор, ${sum.dataBits}-битные данные, счётчик команд ${sum.pcBits} бит. Регистры с триггерами: ${rg.list.map((r) => `R${r}`).join(', ') || 'нет'} (остальные регистры в программе не пишутся и всегда равны 0).`);
     L.push('  Файл регистров читается двумя портами: A — первый операнд, адрес данных и цель перехода; B — второй операнд и данные записи. Регистры выбираются отдельными столбцами ПЗУ (по одному на регистр).');
   } else L.push(`- Архитектура: однотактовый аккумуляторный процессор, ${sum.dataBits}-битные данные, счётчик команд ${sum.pcBits} бит.`);
+  const fit = boardFit(sum.size);
+  L.push(`- Плата: ${sum.layout === 'compact' ? `компактная — узлы плотно, провода идут поверх них в ${sum.layers} слоях (на высоте ${sum.size.y} блоков)` : 'узлы колонкой, шина сбоку (запасная раскладка)'}. ${fit.text}`);
   L.push(`- Режим: ${plan.mode === 'program' ? 'урезанное оборудование под одну программу (адреса сжаты)' : 'полный набор инструкций (ПЗУ можно перепрошивать)'}.`);
   L.push(`- ПЗУ: ${sum.romWords} слов × ${sum.romBits} бит, контейнер «${cont.name}» (${cont.block}), в каждом включённом бите ${cont.slots} шт. предмета ${s.item} (сигнал компаратора 15).`);
   L.push(`  ${s.romFull ? 'Контейнеры стоят во всех клетках матрицы: бит 1 — полный контейнер, бит 0 — пустой.' : 'Контейнеры стоят только в клетках с единицами; пустые клетки матрицы — это нули.'}`);
@@ -194,7 +206,7 @@ export function computerDocs(plan: Plan, built: Built, s: ComputerExportSettings
   L.push('');
   L.push('## Запуск');
   L.push('');
-  L.push('1. Вставьте схему из Litematica (в креативе) и убедитесь, что чанки под всей платой загружены (она большая: при необходимости `/forceload add`).');
+  L.push('1. Вставьте схему из Litematica (в креативе) и убедитесь, что чанки под всей платой загружены (при необходимости `/forceload add`) и тикают: встаньте в центре платы.');
   L.push(`2. Включите RESET, сделайте 2–3 такта CLK, выключите RESET — счётчик команд, ${rg ? 'регистры' : 'аккумулятор'} и флаги обнулятся. ОЗУ не очищается.`);
   L.push('3. Переключайте CLK: каждый такт выполняет одну инструкцию.');
   L.push('');

@@ -64,6 +64,9 @@ export interface BuildStats {
   ms: number;
   size: { x: number; y: number; z: number };
   blocks: number;
+  /** Какая раскладка получилась на самом деле (компактная могла откатиться на «колонкой») и сколько слоёв проводов. */
+  layout: 'compact' | 'stack';
+  layers: number;
 }
 
 export interface Built {
@@ -654,7 +657,6 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
 
   }
   rom = rom ?? stackRom!;
-  void floorStats;
 
   // ───── метки ─────
   const q = (name: string): XYZ => {
@@ -695,6 +697,8 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     ms: Math.round(performance.now() - t0),
     size: { x: b.x1 - b.x0 + 1, y: b.y1 - b.y0 + 1, z: b.z1 - b.z0 + 1 },
     blocks: v.size,
+    layout: floorStats ? 'compact' : 'stack',
+    layers: floorStats?.layers ?? 0,
   };
   const regions: Built['regions'] = [{ name: 'ПЗУ (программа)', ...rom.bounds }];
   for (const [name, c] of cardMap) regions.push({ name, ...c.box });

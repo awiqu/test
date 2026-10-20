@@ -16,11 +16,26 @@ describe('computer export', () => {
     expect(barrels.length).toBe(e.summary.romContainers);
     expect(e.summary.romItems).toBe(barrels.length * 27);
     for (const t of barrels) expect(t.items!.length).toBe(27);
+    // компактная раскладка: плоская плата, помещающаяся в дальность прорисовки
+    expect(e.summary.layout).toBe('compact');
+    expect(e.summary.layers).toBeGreaterThanOrEqual(2);
+    expect(e.summary.size.x).toBeLessThan(320);
+    expect(e.summary.size.z).toBeLessThan(320);
+    expect(e.docs).toContain('Плата: компактная');
     expect(e.docs).toContain('RESET');
     expect(e.docs).toContain('## Содержимое ПЗУ');
     expect(e.docs).toContain('CLK');
     // все рычаги управления присутствуют в схеме
     expect(e.structure.blocks.filter((b) => b.spec.name === 'minecraft:lever').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('layout stack: fallback layout is long and says so in the guide', () => {
+    const p = newProject('acc4');
+    const e = exportComputer(p, { ...defaultExportSettings(), autoTiming: false, layout: 'stack' });
+    expect(e.summary.layout).toBe('stack');
+    expect(e.summary.layers).toBe(0);
+    expect(Math.max(e.summary.size.x, e.summary.size.z)).toBeGreaterThan(600);
+    expect(e.docs).toContain('узлы колонкой');
   });
 
   it('component choices: hopper container, full ROM matrix, other blocks, lamps off', () => {
