@@ -30,7 +30,7 @@ function physicalVsEmulator(project: ComputerProject, source: string, o: RunOpti
   if (!plan.ok) return 'план: ' + plan.issues.map((i) => i.message).join('; ');
   const timed = buildTimed(plan, { ...defaultBuildSettings(), ...o.settings });
   const built: Built = timed.built;
-  log(`guard ${timed.guardRt} rt, запас фаз ${timed.timing.fall}/${timed.timing.rise} gt, замки доходят за ${timed.timing.settle} gt`);
+  log(`guard ${timed.guardRt} rt, запас фаз ${timed.timing.fall}/${timed.timing.rise} gt, замки доходят за ${timed.timing.settle} gt, фаза ${timed.halfPeriod} gt`);
   const asm = assemble(source, spec, project.instructions, project.asm);
   const m = new Machine(spec, project.instructions, asm.words);
   const sw = m.device('switches');
@@ -40,8 +40,8 @@ function physicalVsEmulator(project: ComputerProject, source: string, o: RunOpti
   for (const inp of pr.inputs) if (inp.port === 'SWITCH') sim.setLever(...inp.pos, (((o.switches ?? 0) >> inp.bit) & 1) === 1);
   const bits = (cells: XYZ[]) => cells.reduce((a, c, i) => a + ((sim.powerAt(...c) > 0 ? 1 : 0) << i), 0);
   const lever = (p: XYZ, on: boolean) => sim.setLever(...p, on);
-  const high = o.high ?? 1100;
-  const low = o.low ?? 600;
+  const high = o.high ?? timed.halfPeriod;
+  const low = o.low ?? timed.halfPeriod;
   const cycle = () => {
     lever(pr.clk!, true);
     sim.run(high);
@@ -50,11 +50,11 @@ function physicalVsEmulator(project: ComputerProject, source: string, o: RunOpti
   };
   sim.settle(100000);
   lever(pr.reset, true);
-  sim.run(800);
+  sim.run(Math.max(800, high));
   cycle();
   cycle();
   lever(pr.reset, false);
-  sim.run(800);
+  sim.run(Math.max(800, high));
   if (bits(pr.pc) !== 0) return `после сброса PC=${bits(pr.pc)}`;
   const lampValue = (port: string): number => pr.lamps.filter((l) => l.port === port).reduce((a, l) => a + ((sim.litAt(...l.pos) ? 1 : 0) << l.bit), 0);
   for (let k = 0; k < o.cycles; k++) {

@@ -25,14 +25,14 @@ export interface BuildSettings {
   portLamps: boolean;
   /** Тактирование: рычаг (вручную) или автоматический генератор. */
   clock: ClockKind;
-  /** Для автогенератора: полупериод в игровых тиках (округляется вверх до числа повторителей кольца). */
+  /** Для автогенератора: полупериод в игровых тиках (округляется вверх до числа повторителей кольца); 0 — подобрать по замеру (buildTimed) или 800. */
   clockHalfTicks: number;
   /** Зазор между фазами замков триггеров, тики редстоуна (должен превышать разброс длин проводов). */
   guardRt: number;
 }
 
 export function defaultBuildSettings(): BuildSettings {
-  return { romFull: false, macro: macroSettings(), indicators: true, portLamps: true, clock: 'lever', clockHalfTicks: 800, guardRt: 60 };
+  return { romFull: false, macro: macroSettings(), indicators: true, portLamps: true, clock: 'lever', clockHalfTicks: 0, guardRt: 60 };
 }
 
 export interface Probes {
@@ -65,6 +65,8 @@ export interface Built {
   labels: { name: string; pos: XYZ }[];
   /** Карточки платы (для отладки и интерфейса). */
   cards: Map<string, Card>;
+  /** Области платы (ПЗУ, карточки) в координатах Vox — для документации. */
+  regions: { name: string; x0: number; x1: number; z0: number; z1: number }[];
 }
 
 interface CardPlan {
@@ -245,7 +247,7 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
   let resetLever: XYZ | null = null;
   if (st.clock === 'auto') {
     const delay = 4;
-    const n = Math.max(2, Math.ceil((st.clockHalfTicks / 2 - 1) / delay / 2));
+    const n = Math.max(2, Math.ceil(((st.clockHalfTicks > 0 ? st.clockHalfTicks : 800) / 2 - 1) / delay / 2));
     addPlan({
       name: 'clock',
       w: n + 14,
@@ -447,5 +449,7 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     size: { x: b.x1 - b.x0 + 1, y: b.y1 - b.y0 + 1, z: b.z1 - b.z0 + 1 },
     blocks: v.size,
   };
-  return { vox: v, probes, stats, labels, cards: cardMap };
+  const regions: Built['regions'] = [{ name: 'ПЗУ (программа)', ...rom.bounds }];
+  for (const [name, c] of cardMap) regions.push({ name, ...c.box });
+  return { vox: v, probes, stats, labels, cards: cardMap, regions };
 }

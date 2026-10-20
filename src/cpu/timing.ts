@@ -19,6 +19,15 @@ export interface LockTiming {
 export const MIN_LOCK_MARGIN = 40;
 
 /**
+ * Рекомендуемая длина каждой фазы такта (игровые тики): замки доходят до самой дальней карточки за settle, а после этого данные
+ * (счётчик → ПЗУ → шина → АЛУ → ведущие триггеры) должны успеть установиться. Запас получен перебором длин фаз в симуляторе
+ * (на плате с settle=778 безотказно работают фазы от 1000, на 800 — сбой), здесь взят с запасом.
+ */
+export function recommendedHalfPeriod(t: LockTiming): number {
+  return Math.ceil((t.settle + 450) / 50) * 50;
+}
+
+/**
  * Замеряет в покадровом симуляторе, насколько вовремя доходят замки до триггеров. В сбросе замки всех ведущих меняются на каждом такте,
  * поэтому замер не зависит от программы. Работа триггера «ведущий-ведомый» корректна, если ведомый успевает закрыться до того, как откроется
  * ведущий (и наоборот), — на каждой карточке и между разными карточками.
@@ -90,6 +99,8 @@ export interface TimedBuild {
   timing: LockTiming;
   /** Фактический зазор между фазами (тики редстоуна) после подбора. */
   guardRt: number;
+  /** Рекомендуемая длина фазы такта (игровые тики) — столько держать CLK в каждом состоянии. */
+  halfPeriod: number;
   /** Сколько раз пришлось пересобирать плату. */
   passes: number;
 }
@@ -106,8 +117,10 @@ export function buildTimed(plan: Plan, st: BuildSettings, progress: (msg: string
     const timing = measureLockTiming(probe);
     const worst = Math.min(timing.fall, timing.rise);
     if (worst >= MIN_LOCK_MARGIN || passes >= 4) {
-      const built = st.clock === 'lever' ? probe : buildComputer(plan, { ...st, guardRt }, progress);
-      return { built, timing, guardRt, passes };
+      const halfPeriod = recommendedHalfPeriod(timing);
+      const clockHalfTicks = st.clockHalfTicks > 0 ? st.clockHalfTicks : halfPeriod;
+      const built = st.clock === 'lever' ? probe : buildComputer(plan, { ...st, guardRt, clockHalfTicks }, progress);
+      return { built, timing, guardRt, halfPeriod, passes };
     }
     guardRt += Math.max(2, Math.ceil((MIN_LOCK_MARGIN - worst) / 2) + 2);
     progress(`Запас фаз ${worst} тиков — увеличиваю зазор до ${guardRt}…`);
