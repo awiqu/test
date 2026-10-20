@@ -537,7 +537,7 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
       }
       try {
         progress('Прокладка проводов поверх узлов…');
-        const stats = routeFloor(v, fnets, { layers: 2, progress, seed: attempt + 1 });
+        const stats = routeFloor(v, fnets, { layers: 3, progress, seed: attempt + 1 });
         const shorts = findShorts(v);
         if (process.env.FLOOR_DEBUG) {
           const ign = new Set<string>();

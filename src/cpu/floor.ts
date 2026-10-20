@@ -456,13 +456,48 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
       const extra = (nd: number): number => (steal && foreign(nd) ? STEAL_COST : 0);
       const sameDir = (p: number, c: number, n2: number): boolean => ii(c) - ii(p) === ii(n2) - ii(c) && jj(c) - jj(p) === jj(n2) - jj(c) && li(p) === li(c);
       bannedVia.clear();
+      // окно поиска: охватывающий прямоугольник дерева и приёмника с запасом; в нём же оценка расстояния до дерева (A*)
+      let bi0 = ii(sk.node);
+      let bi1 = bi0;
+      let bj0 = jj(sk.node);
+      let bj1 = bj0;
+      for (const nd of s.parent.keys()) {
+        const a = ii(nd);
+        const b = jj(nd);
+        if (a < bi0) bi0 = a;
+        if (a > bi1) bi1 = a;
+        if (b < bj0) bj0 = b;
+        if (b > bj1) bj1 = b;
+      }
+      let ti0 = Infinity;
+      let ti1 = -Infinity;
+      let tj0 = Infinity;
+      let tj1 = -Infinity;
+      for (const nd of s.parent.keys()) {
+        const a = ii(nd);
+        const b = jj(nd);
+        if (a < ti0) ti0 = a;
+        if (a > ti1) ti1 = a;
+        if (b < tj0) tj0 = b;
+        if (b > tj1) tj1 = b;
+      }
+      const WIN = 70;
+      const wi0 = bi0 - WIN;
+      const wi1 = bi1 + WIN;
+      const wj0 = bj0 - WIN;
+      const wj1 = bj1 + WIN;
+      const hOf = (nd: number): number => {
+        const a = ii(nd);
+        const b = jj(nd);
+        return Math.max(0, ti0 - a, a - ti1) + Math.max(0, tj0 - b, b - tj1);
+      };
       for (let retry = 0; ; retry++) {
         stamp++;
         const heap = new MinHeap();
         seen[sk.node] = stamp;
         dist[sk.node] = 0;
         prev[sk.node] = -1;
-        heap.push(sk.node, 0);
+        heap.push(sk.node, hOf(sk.node));
         let hit = -1;
         const viaOk = (lo: number, hi: number, dx: number, dz: number): boolean => {
           if (bannedVia.has(lo * total + hi)) return false;
@@ -492,12 +527,13 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
             dist[to] = nd2;
             prev[to] = from;
             prevVia[to] = 1;
-            heap.push(to, nd2);
+            heap.push(to, nd2 + hOf(to));
           }
         };
         while (heap.size > 0) {
-          const [nd, d] = heap.pop();
-          if (d > dist[nd]) continue;
+          const [nd, f] = heap.pop();
+          const d = dist[nd];
+          if (f > d + hOf(nd) + 1e-9) continue;
           if (s.parent.has(nd) && !(prevVia[nd] === 1 && prev[nd] >= 0 && s.viaTo.has(nd))) {
             hit = nd;
             break;
@@ -509,7 +545,7 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
           for (const [dx, dz] of D4) {
             const i2 = i + dx;
             const j2 = j + dz;
-            if (!inGrid(l, i2, j2)) continue;
+            if (!inGrid(l, i2, j2) || i2 < wi0 || i2 > wi1 || j2 < wj0 || j2 > wj1) continue;
             const nb = NI(l, i2, j2);
             if (!passable(nb)) continue;
             if (usedEdge.has(edgeKey(nd, nb)) && !(steal && (foreign(nd) || foreign(nb)))) continue;
@@ -521,7 +557,7 @@ function routeFloorLayers(v: Vox, nets: FNet[], opts: FloorOptions, NL: number, 
               dist[nb] = nd2;
               prev[nb] = nd;
               prevVia[nb] = 0;
-              heap.push(nb, nd2);
+              heap.push(nb, nd2 + hOf(nb));
             }
           }
           // рампы между слоями: этот узел — нижний (вверх) или верхний (вниз)
