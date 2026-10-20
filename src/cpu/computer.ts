@@ -37,7 +37,7 @@ export interface BuildSettings {
 }
 
 export function defaultBuildSettings(): BuildSettings {
-  return { romFull: false, macro: macroSettings(), indicators: true, portLamps: true, clock: 'lever', clockHalfTicks: 0, guardRt: 60, layout: 'compact' };
+  return { romFull: false, macro: macroSettings(), indicators: true, portLamps: true, clock: 'lever', clockHalfTicks: 0, guardRt: 76, layout: 'compact' };
 }
 
 export interface Probes {
