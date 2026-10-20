@@ -70,15 +70,16 @@ describe('hardware macros compile and behave like their equations', () => {
     const ev = evaluator(m);
     const r = rng(6);
     for (let k = 0; k < 40; k++) {
-      const v: Record<string, number> = { r0: 0, r1: 0, r2: 0, r3: 0, eSum: 0, eShl: 0, eShr: 0, sub: 0, co: 0, cm: 0, am: 0, a0: 0 };
-      for (const n of Object.keys(v)) v[n] = r() < 0.5 ? 1 : 0;
+      const v: Record<string, number> = { r0: 0, r1: 0, r2: 0, r3: 0, eSum: 0, eShl: 0, eShr: 0, sub: 0, co: 0, cm: 0, am: 0, a0: 0, nreset: 1 };
+      for (const n of Object.keys(v)) if (n !== 'nreset') v[n] = r() < 0.5 ? 1 : 0;
+      if (k % 7 === 3) v.nreset = 0;
       const op = Math.floor(r() * 3);
       v.eSum = op === 0 ? 1 : 0;
       v.eShl = op === 1 ? 1 : 0;
       v.eShr = op === 2 ? 1 : 0;
-      const z = v.r0 | v.r1 | v.r2 | v.r3 ? 0 : 1;
-      const cn = (v.eSum & (v.co ^ v.sub)) | (v.eShl & v.am) | (v.eShr & v.a0);
-      const vn = v.eSum & (v.cm ^ v.co);
+      const z = (v.r0 | v.r1 | v.r2 | v.r3 ? 0 : 1) & v.nreset;
+      const cn = ((v.eSum & (v.co ^ v.sub)) | (v.eShl & v.am) | (v.eShr & v.a0)) & v.nreset;
+      const vn = (v.eSum & (v.cm ^ v.co)) & v.nreset;
       expect(ev(v), JSON.stringify(v)).toEqual({ z, cn, vn });
     }
   });
@@ -103,11 +104,12 @@ describe('hardware macros compile and behave like their equations', () => {
       const co = g | (p & v.cin);
       const o = p | g;
       expect(evA(v), JSON.stringify(v)).toEqual({ bx, p, g, o, s, co });
-      const mv: Record<string, number> = { eSum: 0, s, eAnd: 0, g, eOr: 0, o, eXor: 0, p, eNot: 0, a: v.a, eShl: 0, ap: r() < 0.5 ? 1 : 0, eShr: 0, an: r() < 0.5 ? 1 : 0, eB: 0, bx };
+      const mv: Record<string, number> = { eSum: 0, s, eAnd: 0, g, eOr: 0, o, eXor: 0, p, eNot: 0, a: v.a, eShl: 0, ap: r() < 0.5 ? 1 : 0, eShr: 0, an: r() < 0.5 ? 1 : 0, eB: 0, bx, nreset: 1 };
       const sel = ['eSum', 'eAnd', 'eOr', 'eXor', 'eNot', 'eShl', 'eShr', 'eB'][Math.floor(r() * 8)];
       mv[sel] = 1;
+      if (k % 5 === 2) mv.nreset = 0;
       const val: Record<string, number> = { eSum: s, eAnd: g, eOr: o, eXor: p, eNot: 1 - v.a, eShl: mv.ap, eShr: mv.an, eB: bx };
-      expect(evM(mv), JSON.stringify(mv)).toEqual({ r: val[sel] });
+      expect(evM(mv), JSON.stringify(mv)).toEqual({ r: val[sel] & mv.nreset });
     }
   });
 

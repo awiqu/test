@@ -30,7 +30,7 @@ function compareRun(built: Built, source: string, cycles: number, high: number, 
   cycle();
   cycle();
   lever(pr.reset, false);
-  sim.run(1500);
+  sim.run(800);
   if (bits(pr.pc) !== 0) return `после сброса PC=${bits(pr.pc)}`;
   const ports = portMap(spec);
   for (let k = 0; k < cycles; k++) {
@@ -65,7 +65,7 @@ describe('physical computer', () => {
     log('built: ' + JSON.stringify(b.stats));
     const bnd = b.vox.bounds();
     log(`bounds ${JSON.stringify(bnd)} blocks ${b.vox.size}`);
-    const err = compareRun(b, prog.source, 40, 2000, 700);
+    const err = compareRun(b, prog.source, 40, 1100, 600);
     expect(err).toBeNull();
   }, 3600000);
 });

@@ -47,11 +47,24 @@ function tree(lines: string[], kind: 'OR' | 'AND' | 'NOR', names: string[], out:
  * Такты и замки: lkM — замок ведущих триггеров, lkS — ведомых; замок записи в A/флаги и «стоп» счётчика;
  * nwm — отрицательный импульс записи в ОЗУ (идёт только при weM).
  */
-export function ctlNetlist(): string {
-  return `# Такты и замки триггеров
+export function ctlNetlist(guardRt = 3): string {
+  // «зазор» между фазами замков — задержка клока clkd: цепочка повторителей (по 4 тика редстоуна)
+  const chain: string[] = [];
+  let prev = 'clk';
+  let left = Math.max(1, guardRt);
+  let k = 0;
+  while (left > 0) {
+    const d = Math.min(4, left);
+    chain.push(`g${k} = BUF(${prev}, delay=${d})`);
+    prev = `g${k}`;
+    left -= d;
+    k++;
+  }
+  return `# Такты и замки: зазор между фазами ведущего и ведомого триггеров = ${guardRt} тиков редстоуна
 input clk reset nweA nweF halt weM
 nclk = NOT(clk)
-clkd = BUF(clk, delay=3)
+${chain.join('\n')}
+clkd = BUF(${prev}, delay=1)
 nclkd = NOT(clkd)
 lkM = OR(clk, clkd)
 lkS = OR(nclk, nclkd)
@@ -60,8 +73,10 @@ cw2 = BUF(cw1, delay=4)
 w = NOR(nclk, cw2)
 nreset = NOT(reset)
 hh = AND(halt, nreset)
-lkMA = OR(lkM, nweA, reset)
-lkMF = OR(lkM, nweF, reset)
+hA = AND(nweA, nreset)
+hF = AND(nweF, nreset)
+lkMA = OR(lkM, hA)
+lkMF = OR(lkM, hF)
 lkMP = OR(lkM, hh)
 wm = AND(w, weM, nreset)
 nwm = NOT(wm)
@@ -177,10 +192,11 @@ export function aluMuxNetlist(f: Feat): string {
     names.push(`r${i}`);
   });
   const out: string[] = [];
-  if (names.length === 1) {
-    out.push(`r = BUF(${names[0]})`);
-  } else tree(out, 'OR', names, 'r', 'q');
-  return [`input ${[...new Set(ins)].join(' ')}`, ...L, ...out, 'output r = r'].join('\n') + '\n';
+  // результат обнуляется сигналом сброса (nreset = 0): так A сбрасывается вместе со счётчиком команд
+  if (names.length === 1) out.push(`rr = BUF(${names[0]})`);
+  else tree(out, 'OR', names, 'rr', 'q');
+  out.push('r = AND(rr, nreset)');
+  return [`input ${[...new Set([...ins, 'nreset'])].join(' ')}`, ...L, ...out, 'output r = r'].join('\n') + '\n';
 }
 
 /** Флаги: Z — все разряды результата нулевые; C и V — по переносам сумматора и сдвигам. */
@@ -191,7 +207,9 @@ export function flagsNetlist(f: Feat): string {
   if (f.flags.includes('Z')) {
     const rs = Array.from({ length: f.D }, (_, i) => `r${i}`);
     ins.push(...rs);
-    tree(L, 'NOR', rs, 'z', 'zq');
+    tree(L, 'NOR', rs, 'z0', 'zq');
+    L.push('z = AND(z0, nreset)');
+    ins.push('nreset');
     outs.push('output z = z');
   }
   if (f.flags.includes('C')) {
@@ -214,15 +232,18 @@ export function flagsNetlist(f: Feat): string {
       L.push('c3 = AND(eShr, a0)');
       c.push('c3');
     }
-    if (c.length === 0) {
-      // перенос всегда 0: цепочка из констант не нужна — триггер просто не получит данных
-    } else if (c.length === 1) L.push(`cn = BUF(${c[0]})`);
-    else L.push(`cn = OR(${c.join(', ')})`);
-    if (c.length) outs.push('output cn = cn');
+    if (c.length === 1) L.push(`cn0 = BUF(${c[0]})`);
+    else if (c.length > 1) L.push(`cn0 = OR(${c.join(', ')})`);
+    if (c.length) {
+      L.push('cn = AND(cn0, nreset)');
+      ins.push('nreset');
+      outs.push('output cn = cn');
+    }
   }
   if (f.flags.includes('V') && has(f, 'eSum')) {
     ins.push('eSum', 'co', 'cm');
-    L.push('vx = XOR(cm, co)', 'vn = AND(eSum, vx)');
+    L.push('vx = XOR(cm, co)', 'vn0 = AND(eSum, vx)', 'vn = AND(vn0, nreset)');
+    ins.push('nreset');
     outs.push('output vn = vn');
   }
   return [`input ${[...new Set(ins)].join(' ')}`, ...L, ...outs].join('\n') + '\n';

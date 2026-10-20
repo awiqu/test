@@ -36,6 +36,8 @@ export interface BusNet {
   x?: number;
   /** Для линий, уже идущих сверху (адрес ПЗУ): магистраль должна дотянуться вверх до этой строки. */
   zTop?: number;
+  /** Строка обхода (для источников на восточной стороне); без неё берётся из layout.wrapZs. */
+  wrapZ?: number;
 }
 
 export interface BusLayout {
@@ -178,6 +180,14 @@ function ascend(v: Vox, x: number, zw: number): void {
   v.set(x, 5, zw, { kind: K.Dust });
 }
 
+/** Подъём на обход с нижнего конца магистрали, которая идёт сверху: конец (x, zw-2), обход в строке zw. */
+function ascendFromAbove(v: Vox, x: number, zw: number): void {
+  v.solid(x, 3, zw - 1);
+  v.set(x, 4, zw - 1, { kind: K.Dust });
+  v.solid(x, 4, zw);
+  v.set(x, 5, zw, { kind: K.Dust });
+}
+
 /** Спуск с обхода (x, zw) в верхний конец магистрали (x, zw+2). */
 const descend = ascend;
 
@@ -245,14 +255,24 @@ export class Bus {
       } else {
         const p = net.src.pin;
         const right = lay.rightXs[ri++];
-        const zw = lay.wrapZs[wi++];
+        const zw = net.wrapZ ?? lay.wrapZs[wi++];
         if (right === undefined || zw === undefined) throw new Error(`Не хватило столбцов/строк для обхода (цепь ${net.name})`);
-        // правая магистраль: от источника вверх до подъёма
-        const rRes = new Set<number>([p.z, zw, zw + 1, zw + 2]);
-        buildTrunk(v, right, zw + 2, p.z, p.z, rRes);
-        buildRun(v, p.z, p.x + 1, right - 2, { startRepeater: true, endRepeater: true });
-        injectFromWest(v, right, p.z);
-        ascend(v, right, zw);
+        if (p.z < zw) {
+          // источник выше строки обхода: магистраль идёт вниз до подъёма
+          if (zw - 2 - p.z < 2) throw new Error(`Источник цепи ${net.name} слишком близко к строке обхода`);
+          const rRes = new Set<number>([p.z, zw - 2, zw - 1, zw]);
+          buildTrunk(v, right, p.z, zw - 2, p.z, rRes);
+          buildRun(v, p.z, p.x + 1, right - 2, { startRepeater: true, endRepeater: true });
+          injectFromWest(v, right, p.z);
+          ascendFromAbove(v, right, zw);
+        } else {
+          // источник ниже: магистраль идёт вверх до подъёма
+          const rRes = new Set<number>([p.z, zw, zw + 1, zw + 2]);
+          buildTrunk(v, right, zw + 2, p.z, p.z, rRes);
+          buildRun(v, p.z, p.x + 1, right - 2, { startRepeater: true, endRepeater: true });
+          injectFromWest(v, right, p.z);
+          ascend(v, right, zw);
+        }
         // обход на запад и спуск в левую магистраль
         buildWrap(v, zw, right, left);
         descend(v, left, zw);

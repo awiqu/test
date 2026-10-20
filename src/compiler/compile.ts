@@ -197,6 +197,23 @@ function stamp(nl: Netlist, defs: ModuleDef[], layout: Layout, settings: ExportS
       sinkChains.set(layout.slotNets[inst.id][slot], list);
     });
   }
+  if (settings.edgePins) {
+    // макрос для платы: за столбцами входов и выходов провода не прокладываются — там строятся ножки выводов
+    let xin = Infinity;
+    let xout = -Infinity;
+    for (const i of leverCell.values()) xin = Math.min(xin, g.x(i));
+    for (const i of lampCell.values()) xout = Math.max(xout, g.x(i));
+    for (let y = 0; y < g.H; y++) {
+      for (let z = 0; z < g.D; z++) {
+        for (let x = 0; x < g.W; x++) {
+          if (x < xin || x > xout) {
+            const i = g.idx(x, y, z);
+            if (g.kind[i] === K.Air) g.res[i] |= RES_BLOCKED;
+          }
+        }
+      }
+    }
+  }
   const trees: NetTree[] = [];
   for (const net of nl.nets) {
     const root = rootChains.get(net.id);

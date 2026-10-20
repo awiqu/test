@@ -504,6 +504,17 @@ export class TickSim {
     this.propagate();
   }
 
+  /** Номер связной компоненты пыли в клетке (или -1). */
+  componentAt(x: number, y: number, z: number): number {
+    return this.dustComp[this.idxAt(x, y, z)];
+  }
+  /** Все клетки пыли компоненты c в координатах постройки. */
+  componentCells(c: number): [number, number, number][] {
+    const out: [number, number, number][] = [];
+    for (let i = 0; i < this.dustComp.length; i++) if (this.dustComp[i] === c) out.push([this.g.x(i) - this.ox, this.g.y(i) - this.oy, this.g.z(i) - this.oz]);
+    return out;
+  }
+
   powerAt(x: number, y: number, z: number): number {
     return this.power[this.idxAt(x, y, z)];
   }
