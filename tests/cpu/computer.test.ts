@@ -50,6 +50,9 @@ function physicalVsEmulator(project: ComputerProject, source: string, o: RunOpti
     sim.run(low);
   };
   sim.settle(100000);
+  // содержимое ОЗУ и портов после включения неопределено (гонка сигналов); эмулятор считает его нулевым — как и проверка на сервере
+  for (const cells of pr.ram.values()) for (const c of cells) sim.forceRepeater(...c, false);
+  sim.run(200);
   lever(pr.reset, true);
   sim.run(Math.max(800, high));
   cycle();

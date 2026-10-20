@@ -539,6 +539,13 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
         progress('Прокладка проводов поверх узлов…');
         const stats = routeFloor(v, fnets, { layers: 2, progress, seed: attempt + 1 });
         const shorts = findShorts(v);
+        if (process.env.FLOOR_DEBUG) {
+          const ign = new Set<string>();
+          for (const n of fnets) for (const q of [n.src, ...n.sinks]) ign.add(`${q.x},${q.y},${q.z}`);
+          const contacts = findShorts(v, { cards: true, ignore: ign }).filter((q) => q.nets.includes('(карточка)'));
+          process.stderr.write(`CONTACTS ${contacts.length}\n`);
+          for (const q of contacts.slice(0, 12)) process.stderr.write(`  ${q.nets.join(' × ')} at ${q.at.join(',')}\n`);
+        }
         if (shorts.length) throw new FloorError(`короткое замыкание цепей: ${shorts.slice(0, 3).map((x) => x.nets.join(' × ')).join('; ')}`, []);
         return { rom: rom2, stats };
       } catch (e) {

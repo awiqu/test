@@ -504,6 +504,21 @@ export class TickSim {
     this.propagate();
   }
 
+  /**
+   * Принудительно задаёт состояние повторителя. Нужно для начального содержимого памяти: в настоящей схеме оно после включения
+   * неопределено (зависит от гонки сигналов), а эмулятор считает его нулевым.
+   */
+  forceRepeater(x: number, y: number, z: number, on: boolean): void {
+    const i = this.idxAt(x, y, z);
+    if ((this.g.kind[i] as K) !== K.Repeater) throw new Error(`В (${x},${y},${z}) нет повторителя`);
+    const v = on ? 1 : 0;
+    if (this.lit[i] === v) return;
+    this.lit[i] = v;
+    this.due[i] = -1;
+    this.touched(i);
+    this.propagate();
+  }
+
   /** Номер связной компоненты пыли в клетке (или -1). */
   componentAt(x: number, y: number, z: number): number {
     return this.dustComp[this.idxAt(x, y, z)];

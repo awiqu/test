@@ -13,7 +13,15 @@ export interface Short {
  * Ищет короткие замыкания между цепями шины: связные куски пыли/повторителей (по правилам соединения пыли игры), в которых
  * встречаются провода двух разных цепей. Каждую клетку, поставленную шиной, Vox помечает именем цепи (Vox.ownerOf).
  */
-export function findShorts(v: Vox, withCards = false): Short[] {
+export interface ShortOptions {
+  /** Считать клетки без владельца (карточки) «цепью (карточка)»: так находятся касания проводов к чужим внутренностям карточек. */
+  cards?: boolean;
+  /** Клетки, через которые соединение не учитывается (выводы карточек: там провод и должен касаться карточки). */
+  ignore?: Set<string>;
+}
+
+export function findShorts(v: Vox, opts: ShortOptions = {}): Short[] {
+  const withCards = opts.cards === true;
   const { grid: g, ox, oy, oz } = toGrid(v);
   const parent = new Map<number, number>();
   const find = (a: number): number => {
@@ -41,7 +49,12 @@ export function findShorts(v: Vox, withCards = false): Short[] {
   // Пыль — один узел на клетку; у повторителя два узла (сторона входа и сторона выхода): сигнал через него идёт намеренно,
   // но чужой провод, коснувшийся любой из его сторон, — замыкание.
   const cells: [number, number, number][] = [];
+  const ignoreIdx = new Set<number>();
   v.forEach((x, y, z, c) => {
+    if (opts.ignore?.has(`${x},${y},${z}`)) {
+      ignoreIdx.add(g.idx(x + ox, y + oy, z + oz));
+      return;
+    }
     if (c.kind === K.Dust || c.kind === K.Repeater) cells.push([x, y, z]);
   });
   for (const [x, y, z] of cells) {
@@ -61,6 +74,7 @@ export function findShorts(v: Vox, withCards = false): Short[] {
       const mz = gz + DZ[d];
       const cands = s === 2 ? [g.idx(mx, gy + 1, mz)] : [g.idx(mx, gy, mz), g.idx(mx, gy - 1, mz)];
       for (const ci of cands) {
+        if (ignoreIdx.has(ci)) continue;
         const k = g.kind[ci];
         if (k === K.Dust) union(here * 2, ci * 2);
         else if (k === K.Repeater) {
