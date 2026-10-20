@@ -24,6 +24,8 @@ export interface PlaceOptions {
   iterations?: number;
   /** Зазор между прямоугольниками. */
   gap?: number;
+  /** Вес габаритов платы относительно длины связей (по умолчанию 1). */
+  bboxWeight?: number;
   /** Подсказка про вес по осям (линии вдоль Z обычно дороже). */
   progress?: (msg: string) => void;
 }
@@ -134,7 +136,7 @@ export function placeCards(cards: PlaceCard[], nets: PlaceNet[], opts: PlaceOpti
       const frac = it / ITER;
       const T = T0 * Math.pow(T1 / T0, frac);
       const ow = 0.5 + 40 * frac;
-      const bw = 0.6 * (0.3 + frac);
+      const bw = (opts.bboxWeight ?? 1) * 0.6 * (0.3 + frac);
       const i = Math.floor(rnd() * n);
       const sw = rnd() < 0.25 ? Math.floor(rnd() * n) : -1;
       const j = sw >= 0 && sw !== i ? sw : -1;
@@ -189,6 +191,7 @@ export function placeCards(cards: PlaceCard[], nets: PlaceNet[], opts: PlaceOpti
       }
     }
     legalize();
+    compact();
     // сдвиг к началу координат
     let mx = Infinity;
     let mz = Infinity;
@@ -209,6 +212,38 @@ export function placeCards(cards: PlaceCard[], nets: PlaceNet[], opts: PlaceOpti
     let ov = 0;
     for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) ov += ovl(i, j);
     return { x: [...X], z: [...Z], width: w, height: h, wire: nets.reduce((a, _, k) => a + hp(k), 0), overlap: ov };
+  }
+
+  /** Сдвигает карточки к началу координат, пока это возможно без перекрытий (поочерёдно по осям). */
+  function compact(): void {
+    const stepX = (i: number): number => (cards[i].parX === undefined ? 1 : 2);
+    const stepZ = (i: number): number => (cards[i].parZ === undefined ? 1 : 2);
+    for (let pass = 0; pass < 40; pass++) {
+      let moved = false;
+      const byX = cards.map((_, i) => i).sort((a, b) => X[a] - X[b]);
+      for (const i of byX) {
+        while (X[i] - stepX(i) >= 0) {
+          X[i] -= stepX(i);
+          if (ovlOf(i) > 0) {
+            X[i] += stepX(i);
+            break;
+          }
+          moved = true;
+        }
+      }
+      const byZ = cards.map((_, i) => i).sort((a, b) => Z[a] - Z[b]);
+      for (const i of byZ) {
+        while (Z[i] - stepZ(i) >= 0) {
+          Z[i] -= stepZ(i);
+          if (ovlOf(i) > 0) {
+            Z[i] += stepZ(i);
+            break;
+          }
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
   }
 
   /** Устраняет остаточные перекрытия: карточка переносится на ближайшее свободное место. */

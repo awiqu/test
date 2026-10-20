@@ -410,7 +410,7 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
   let floorStats: FloorStats | undefined;
 
   const compactLayout = (): { rom: RomLayout; stats: FloorStats } => {
-    const ESC = 10; // поле под выходы выводов (плоский участок + рампа в 5 уровней)
+    const ESC = process.env.FLOOR_ESC ? Number(process.env.FLOOR_ESC) : 8; // поле под выходы выводов (плоский участок + рампа в 5 уровней)
     const dryRun = <T,>(fn: () => T): T => {
       const real = v;
       v = new Vox();
@@ -505,7 +505,15 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
     let lastErr: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       progress(`Расстановка узлов${attempt ? ` (попытка ${attempt + 1})` : ''}…`);
-      const pr = placeCards(pcs, placeNets, { seed: 7 + attempt * 13, gap: 1 + attempt });
+      // несколько стартов отжига: берём самую плотную расстановку (площадь + связи)
+      const starts = process.env.FLOOR_STARTS ? Number(process.env.FLOOR_STARTS) : 6;
+      let pr = placeCards(pcs, placeNets, { seed: 7 + attempt * 13, gap: 1 + attempt, bboxWeight: 4 });
+      const score = (r: typeof pr): number => r.width * r.height + 3 * r.wire + (r.overlap > 0 ? 1e9 : 0);
+      for (let k = 1; k < starts; k++) {
+        const cand = placeCards(pcs, placeNets, { seed: 7 + attempt * 13 + k * 101, gap: 1 + attempt, bboxWeight: 4 });
+        if (score(cand) < score(pr)) pr = cand;
+      }
+      if (process.env.FLOOR_DEBUG) process.stderr.write(`PLACE ${pr.width}x${pr.height} wire=${Math.round(pr.wire)} overlap=${pr.overlap} sumArea=${pcs.reduce((a, c) => a + c.w * c.h, 0)}\n`);
       // реальная расстановка
       v = new Vox();
       cardMap.clear();
