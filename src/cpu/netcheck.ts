@@ -13,7 +13,7 @@ export interface Short {
  * Ищет короткие замыкания между цепями шины: связные куски пыли/повторителей (по правилам соединения пыли игры), в которых
  * встречаются провода двух разных цепей. Каждую клетку, поставленную шиной, Vox помечает именем цепи (Vox.ownerOf).
  */
-export function findShorts(v: Vox): Short[] {
+export function findShorts(v: Vox, withCards = false): Short[] {
   const { grid: g, ox, oy, oz } = toGrid(v);
   const parent = new Map<number, number>();
   const find = (a: number): number => {
@@ -74,7 +74,7 @@ export function findShorts(v: Vox): Short[] {
   // владельцы цепей по компонентам
   const owners = new Map<number, Map<string, [number, number, number]>>();
   for (const [x, y, z] of cells) {
-    const o = v.ownerOf(x, y, z);
+    const o = v.ownerOf(x, y, z) ?? (withCards ? '(карточка)' : undefined);
     if (!o) continue;
     const i = g.idx(x + ox, y + oy, z + oz);
     // у повторителя владелец записан в оба узла

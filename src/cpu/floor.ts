@@ -10,6 +10,8 @@ import { Vox } from './vox';
  * повторителем). Один узел принадлежит одной цепи; перекрещиваются цепи только на разных слоях.
  */
 
+export const floorDebug: { edges: { net: string; from: [number, number, number]; to: [number, number, number]; kind: string; strength: number }[] } = { edges: [] };
+
 export const LAYER0_Y = 6;
 export const layerY = (l: number): number => LAYER0_Y + 2 * l;
 
@@ -216,6 +218,7 @@ export interface FloorOptions {
  */
 export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): FloorStats {
   const t0 = performance.now();
+  floorDebug.edges.length = 0;
   const NL = opts.layers ?? 2;
   const attempts = opts.attempts ?? 12;
   // границы и высоты карточек
@@ -302,7 +305,13 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
   const BLOCK = -2;
   const SHADOW = -3;
   const baseOwner = new Int32Array(total).fill(FREE);
-  const usableCol = (l: number, x: number, z: number): boolean => colTop(x, z) <= layerY(l) - 3 && !claims.has(key(x, layerY(l), z)) && !claims.has(key(x, layerY(l) - 1, z));
+  /** Соседние колонки не должны содержать чужую пыль на уровне провода или вплотную под ним (пыль соединяется по диагонали). */
+  const quietAround = (x: number, z: number, y: number): boolean => {
+    for (const [dx, dz] of D4) if (colTop(x + dx, z + dz) > y - 2) return false;
+    return true;
+  };
+  const usableCol = (l: number, x: number, z: number): boolean =>
+    colTop(x, z) <= layerY(l) - 3 && quietAround(x, z, layerY(l)) && !claims.has(key(x, layerY(l), z)) && !claims.has(key(x, layerY(l) - 1, z));
   for (let l = 0; l < NL; l++)
     for (let j = 0; j < H; j++)
       for (let i = 0; i < W; i++) {
@@ -459,11 +468,11 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
           const [mx, mz] = midCol(l0, lo, lowEdge);
           const y0 = layerY(l0);
           // клетки рампы: серединная опора на уровне нижнего слоя и пыль на уровень выше; над нижним узлом должно быть пусто
-          if (colTop(mx, mz) > y0 - 3) return false;
+          if (colTop(mx, mz) > y0 - 3 || !quietAround(mx, mz, y0 + 1)) return false;
           if (claims.has(key(mx, y0, mz)) || claims.has(key(mx, y0 + 1, mz))) return false;
           const hx = nodeX(ii(hi));
           const hz = nodeZ(jj(hi));
-          if (colTop(hx, hz) > y0 - 2) return false;
+          if (colTop(hx, hz) > y0 - 2 || !quietAround(hx, hz, y0 + 2)) return false;
           if (claims.has(key(hx, y0 + 1, hz))) return false;
           // нижний узел не должен быть занят чужой рампой, а над ним ничего нет
           return true;
@@ -634,6 +643,7 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
           const dz = Math.sign(nodeZ(jj(hi)) - nodeZ(jj(lo)));
           const lx = nodeX(ii(lo));
           const lz = nodeZ(jj(lo));
+          if (process.env.FLOOR_DEBUG) floorDebug.edges.push({ net: s.net.name, from: [x0, layerY(l), z0], to: [x1, layerY(li(c)), z1], kind: 'via', strength });
           v.solid(lx + dx, y0, lz + dz); // середина ребра нижнего слоя — опора рампы
           v.dust(lx + dx, y0 + 1, lz + dz);
           wireCells += 1;
@@ -650,6 +660,7 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
         if (strength <= 9 || strength - 2 < cs) {
           const dx = x1 - x0;
           const dz = z1 - z0;
+          if (process.env.FLOOR_DEBUG) floorDebug.edges.push({ net: s.net.name, from: [x0, y, z0], to: [x1, y, z1], kind: 'rep', strength });
           v.repeater(mx, y, mz, SIDE(-Math.sign(dx), -Math.sign(dz)), 1);
           repeaters++;
           s2 = 15;
@@ -660,6 +671,7 @@ export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): Floor
         if (process.env.FLOOR_DEBUG && v.get(mx, y, mz)) {
           process.stderr.write(`COLLIDE net=${s.net.name} cell=(${mx},${y},${mz}) existing owner=${v.ownerOf(mx, y, mz)} kind=${v.get(mx, y, mz)!.kind} nodes (${x0},${z0},l${l})->(${x1},${z1})\n`);
         }
+        if (process.env.FLOOR_DEBUG) floorDebug.edges.push({ net: s.net.name, from: [x0, y, z0], to: [x1, y, z1], kind: 'flat', strength });
         v.dust(mx, y, mz);
         wireCells++;
         s2 = strength - 2;
