@@ -25,7 +25,7 @@ class GlobalRouter:
     def mark_obstacles(self, extra_cells=()):
         """занятые клетки сетки + зазор -> блокированные узлы (по всем слоям)"""
         blk = set()
-        occ = set((p[0], p[2]) for p in self.g.b)
+        occ = set((p[0], p[2]) for p in self.g.b if p[1] >= self.y0)
         occ |= set(extra_cells)
         for (x, z) in occ:
             # узлы, в 3x3 окрестности которых лежит клетка
@@ -77,6 +77,21 @@ class GlobalRouter:
             return False
         srcmap = {name: [self._pinnode(src)] for name, (src, sinks) in self.nets.items()}
         R.assign_repeaters(srcmap)
+        # регенерация перед каждым приёмником: последняя средина улицы -> повторитель в сторону порта
+        for name, (src, sinks) in self.nets.items():
+            edges = R.edges_of_net.get(name, [])
+            for sk in sinks:
+                n = self._pinnode(sk)
+                inc = [(a, b, kd) for (a, b, kd) in edges if n in (a, b)]
+                if len(inc) != 1 or inc[0][2] != "flat":
+                    continue
+                a, b, kd = inc[0]
+                other = b if a == n else a
+                key = R.skey((a[0], a[1]), (b[0], b[1]))
+                # снять существующие повторители на этой улице и поставить направленный к порту
+                for k2 in [k for k in R.reps if k[0] == key and k[1] == n[2]]:
+                    del R.reps[k2]
+                R.reps[(key, n[2], other[:2], n[:2])] = True
         return True
 
     def _pinnode(self, pin):
