@@ -114,7 +114,8 @@ def insert_repeaters_row(g, y, z, x0, x1, step=MAXRUN):
 
 class PLA:
     """Построенная ПЛМ."""
-    def __init__(self, g, ox, oz, inputs, outputs, mat="stone"):
+    def __init__(self, g, ox, oz, inputs, outputs, mat="stone", fixed_terms=None):
+        self.fixed_terms = [tuple(sorted(t)) for t in fixed_terms] if fixed_terms is not None else None
         self.g = g
         self.inputs = list(inputs)           # имена
         self.outputs = outputs               # name -> list of terms; term = [(name, pol), ...]
@@ -128,6 +129,13 @@ class PLA:
         lits = []
         need_neg = set()
         terms = []
+        if self.fixed_terms is not None:          # A-плоскость не зависит от данных (ПЗУ)
+            for tt in self.fixed_terms:
+                if tt not in terms:
+                    terms.append(tt)
+                for (n, p) in tt:
+                    if p == 0:
+                        need_neg.add(n)
         for oname, tl in self.outputs.items():
             for t in tl:
                 tt = tuple(sorted(t))
@@ -201,6 +209,7 @@ class PLA:
         # plane_b: столбцы по z=oz+2c, c=терм; строки (выходы) вдоль Z. Но plane_b использует oz как начало: нужно oz_b=oz.
         z_endB, xs = plane_b(g, xB, oz, nterms, nout, sitesB, mat=mat)
         self.out_ports = {on: (xs[i], 0, z_endB) for i, on in enumerate(outs)}
+        self.b_xs, self.b_oz, self.b_outs = xs, oz, outs      # координаты B-плоскости: сайт (вывод i, терм t) = (xs[i], 1, oz+2t+1)
         self.size = (xB + 2 * nout - ox, z_endB - z_in)
         self.x_endB = xB + 2 * nout
         self.z_endB = z_endB
