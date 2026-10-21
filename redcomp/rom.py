@@ -67,12 +67,13 @@ def build_rom(core, ox, oz, words, mod="rom", gap=6):
             g.solid(xc, 1, zk); g.dust(xc, 2, zk)
         for xx in range(x_lo, x_hi + 3):
             g.solid(xx, 1, zk); g.dust(xx, 2, zk)
-        # повторители строки каждые 11 клеток (вправо), не в точках рамп
+        # повторители строки: сразу за каждым входом рампы (регенерация) и далее каждые 10 клеток
         ramp_x = {p.out_ports[f"b{k}"][0] for p in chunks}
+        forced = {rx + 2 for rx in ramp_x}
         n = 0
         for xx in range(x_lo, x_hi + 3):
             n += 1
-            if n >= 11 and all(abs(xx - rx) > 1 for rx in ramp_x):
+            if xx in forced or (n >= 10 and all(abs(xx - rx) > 1 for rx in ramp_x) and xx + 1 not in forced):
                 g.repeater(xx, 2, zk, "east"); n = 0
         # спуск вниз на y=0 справа: (xe,2) -> (xe+1,1) -> (xe+2,0)
         xe = x_hi + 2
