@@ -73,7 +73,7 @@ def build_rom(core, ox, oz, words, mod="rom", gap=6):
         n = 0
         for xx in range(x_lo, x_hi + 3):
             n += 1
-            if xx in forced or (n >= 10 and all(abs(xx - rx) > 1 for rx in ramp_x) and xx + 1 not in forced):
+            if xx <= x_hi and (xx in forced or (n >= 10 and all(abs(xx - rx) > 1 for rx in ramp_x) and xx + 1 not in forced)):
                 g.repeater(xx, 2, zk, "east"); n = 0
         # спуск вниз на y=0 справа: (xe,2) -> (xe+1,1) -> (xe+2,0)
         xe = x_hi + 2
