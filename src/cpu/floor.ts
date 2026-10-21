@@ -217,11 +217,12 @@ export interface FloorOptions {
  * Карточки — всё, что уже лежит в Vox без владельца; их верхняя граница определяет, где можно вести провод.
  */
 export function routeFloor(v: Vox, nets: FNet[], opts: FloorOptions = {}): FloorStats {
-  const base = opts.layers ?? 2;
-  // сначала два слоя; если часть цепей не проложить — ещё один слой (стоят провода выше, плата та же)
+  // слоёв по умолчанию три; в платах с сотней цепей и больше — четыре (иначе первые попытки уходят впустую)
+  const base = opts.layers ?? (nets.length >= 110 ? 4 : 3);
+  // если часть цепей не проложить — ещё один слой (провода выше, плата та же)
   for (let layers = base; ; layers++) {
     try {
-      return routeFloorLayers(v, nets, opts, layers, opts.attempts ?? (layers === base ? 4 : 8));
+      return routeFloorLayers(v, nets, opts, layers, opts.attempts ?? (layers === base ? 3 : 6));
     } catch (e) {
       if (!(e instanceof FloorError) || e.failed.length === 0 || layers >= base + 1) throw e;
       opts.progress?.(`Слоёв проводов не хватило (${e.failed.length} цепей) — добавляю слой…`);

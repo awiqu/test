@@ -540,7 +540,7 @@ export function buildComputer(plan: Plan, st: BuildSettings = defaultBuildSettin
       }
       try {
         progress('Прокладка проводов поверх узлов…');
-        const stats = routeFloor(v, fnets, { layers: 3, progress, seed: attempt + 1 });
+        const stats = routeFloor(v, fnets, { progress, seed: attempt + 1 });
         const shorts = findShorts(v);
         if (shorts.length) throw new FloorError(`короткое замыкание цепей: ${shorts.slice(0, 3).map((x) => x.nets.join(' × ')).join('; ')}`, []);
         return { rom: rom2, stats };

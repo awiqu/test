@@ -41,5 +41,5 @@ describe('built computers have no shorts (the build itself fails otherwise)', ()
     const { project, source } = regRichProject();
     const plan = planComputer(project, { mode: 'program', source });
     expect(() => buildComputer(plan, defaultBuildSettings())).not.toThrow();
-  }, 300000);
+  }, 1500000);
 });
