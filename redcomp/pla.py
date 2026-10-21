@@ -188,7 +188,7 @@ class PLA:
         for z in zs:
             # пыль строки уже на y=0 до x_endA; рампа продолжается с x_endA
             ramp_up_x(g, x_endA, z, mat, regen=True)
-        xB = x_endA + 3            # начало плоскости B (первая строка B: x= xB)
+        xB = x_endA + 4            # начало плоскости B (чётный x для выравнивания порта)
         # столбцы B лежат на z=zs[r]; B-стена начинается с x_lo = xB-1; рампа кончается на x_endA+2 (y=2) -> смыкается с x_lo?
         # plane_b ставит стену/пыль от x_lo=ox_b-1.. ; задаём ox_b = x_endA+3 -> x_lo = x_endA+2 (последняя клетка рампы)
         outs = list(self.outputs.keys())

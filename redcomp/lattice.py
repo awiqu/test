@@ -680,6 +680,14 @@ class PFRouter(Router):
     """Router с итеративной трассировкой. Жёсткие ресурсы: узлы вентилей, пины, терминалы входов/выходов,
     улицы факелов/входов. Мягкие: остальные узлы и улицы на слоях 0/2 (ёмкость 1)."""
 
+    blk = frozenset()          # заблокированные узлы (i,j) — препятствия (модули)
+    pin_nodes = {}             # (i,j) -> имя сети
+
+    def _node_ok(self, i, j, net):
+        if (i, j) in self.blk:
+            return self.pin_nodes.get((i, j)) == net
+        return True
+
     def setup_hard(self, nets_spec):
         """nets_spec: name -> {'terms': [узлы слой0 (i,j,l)], ...} — все терминалы уже занимают узлы (self.node)"""
         self.hard_node = {}
@@ -723,7 +731,7 @@ class PFRouter(Router):
                 continue
             # плоский
             if not (l == 0 and touches) and not self._hard_blocked_street(key, l, net) \
-                    and not self._hard_blocked_node(i2, j2, l, net) \
+                    and not self._hard_blocked_node(i2, j2, l, net) and self._node_ok(i2, j2, net) \
                     and key not in self._cur_ramp \
                     and not (l == 2 and ((i2, j2) in self._cur_low or (i, j) in self._cur_low)):
                 if not (l == 2 and (i2, j2) in self._air_hard) and not (l == 2 and (i, j) in self._air_hard):
@@ -739,6 +747,8 @@ class PFRouter(Router):
             else:
                 low, high = (i2, j2), (i, j)
             if low in self.gates or (high in self.gates and False):
+                continue
+            if not (self._node_ok(low[0], low[1], net) and self._node_ok(high[0], high[1], net)):
                 continue
             if self._hard_blocked_node(low[0], low[1], 0, net) or self._hard_blocked_node(high[0], high[1], 2, net) \
                     or self._hard_blocked_node(low[0], low[1], 2, net):

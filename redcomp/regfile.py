@@ -12,7 +12,7 @@ def _line_with_reps(g, cells, flow, avoid, every=11):
         else:
             g.dust(x, y, z)
 
-def regfile(g: Grid, ox, oz, nreg=8, nbit=8, px=9, pz=8, mat="stone"):
+def regfile(g: Grid, ox, oz, nreg=8, nbit=8, px=10, pz=8, mat="stone"):
     """oz: z входа линий (порты на (x,0,oz)). Возвращает dict портов.
     sel[r], wr[r]: (x,0,oz) — пыль на y=0, принимает сигнал сверху (будет рампа вверх).
     W_in[i]: (x_east, 0, zw_i)  вход данных (с востока, течёт на запад)
@@ -25,7 +25,7 @@ def regfile(g: Grid, ox, oz, nreg=8, nbit=8, px=9, pz=8, mat="stone"):
     for r in range(nreg):
         xd = ox + r * px + 4
         tap_x.add(xd)
-        wr_x, sel_x = ox + r * px, ox + r * px + 7
+        wr_x, sel_x = ox + r * px, ox + r * px + 8
         for x, name in ((wr_x, "wr"), (sel_x, "sel")):
             # порт и рампа
             g.dust(x, 0, oz)
@@ -44,7 +44,7 @@ def regfile(g: Grid, ox, oz, nreg=8, nbit=8, px=9, pz=8, mat="stone"):
             ports[name][r] = (x, 0, oz)
     for r in range(nreg):
         xd = ox + r * px + 4
-        wr_x, sel_x = ox + r * px, ox + r * px + 7
+        wr_x, sel_x = ox + r * px, ox + r * px + 8
         for i in range(nbit):
             zw = zw0 + i * pz
             regbit(g, xd, zw, wr_x, sel_x, mat)
