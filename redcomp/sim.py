@@ -25,8 +25,11 @@ class Server:
     def clear(self, lo, hi):
         (x0, y0, z0), (x1, y1, z1) = lo, hi
         # fill ограничен 32768 блоками -> режем по слоям
+        T = 128                                  # плитки <= 16384 блоков на слой (лимит fill 32768)
         for y in range(y0, y1 + 1):
-            self.r.cmd(f"fill {x0} {y} {z0} {x1} {y} {z1} minecraft:air")
+            for xa in range(x0, x1 + 1, T):
+                for za in range(z0, z1 + 1, T):
+                    self.r.cmd(f"fill {xa} {y} {za} {min(xa + T - 1, x1)} {y} {min(za + T - 1, z1)} minecraft:air")
 
     def load(self, g: Grid, origin=(0, 0, 0), batch=2000):
         ox, oy, oz = origin

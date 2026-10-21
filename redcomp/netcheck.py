@@ -12,7 +12,7 @@ def _flow(b):
     return dx, dz
 
 
-def neighbors(g: Grid, p, level):
+def neighbors(g: Grid, p, level, decay=True):
     """(следующая клетка, новый уровень) от клетки p с уровнем level (пыль p несёт level)."""
     x, y, z = p
     b = g.b[p]
@@ -31,8 +31,8 @@ def neighbors(g: Grid, p, level):
                 if nb is None:
                     continue
                 if nb.name == "redstone_wire":
-                    if level - 1 >= 1:
-                        res.append((q, level - 1))
+                    if not decay or level - 1 >= 1:
+                        res.append((q, level - 1 if decay else level))
                     break
                 if nb.name in ("repeater", "comparator") and q[1] == y:
                     fx, fz = _flow(nb)
@@ -71,6 +71,34 @@ def reach(g: Grid, src, start_level=15):
             if best.get(q, 0) < l2:
                 heapq.heappush(pq, (-l2, q))
     return best
+
+
+def cells_of(g: Grid, src):
+    """все клетки, электрически связанные с источником (без учёта затухания)"""
+    seen = {src}
+    st = [src]
+    while st:
+        p = st.pop()
+        for q, _ in neighbors(g, p, 15, decay=False):
+            if q not in seen:
+                seen.add(q); st.append(q)
+    return seen
+
+
+def find_shorts(g: Grid, nets, verbose=True):
+    """замыкания между цепями: клетка достижима из источников двух разных цепей"""
+    owner, shorts = {}, []
+    for name, src, sinks in nets:
+        for c in cells_of(g, (src[0], 0, src[1])):
+            if c in owner and owner[c] != name:
+                shorts.append((owner[c], name, c))
+            else:
+                owner[c] = name
+    if verbose:
+        for sh in shorts[:20]:
+            print("  ЗАМЫКАНИЕ:", sh)
+        print(f"find_shorts: {len(shorts)}")
+    return shorts
 
 
 def check_nets(g: Grid, nets, weak=(), verbose=True):
