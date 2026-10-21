@@ -79,6 +79,8 @@ def cells_of(g: Grid, src):
     st = [src]
     while st:
         p = st.pop()
+        if p != src and g.b[p].name in ("repeater", "comparator"):
+            continue                       # граница компонента: за повторитель не идём (это не замыкание)
         for q, _ in neighbors(g, p, 15, decay=False):
             if q not in seen:
                 seen.add(q); st.append(q)
