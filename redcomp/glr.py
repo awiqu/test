@@ -19,6 +19,8 @@ class GlobalRouter:
         self.ni = (x1 - x0) // 2 + 1
         self.nj = (z1 - z0) // 2 + 1
         self.R = PFRouter(self.ni, self.nj, x0, z0, y0, mat)
+        self.R.pin_nodes = {}          # иначе общий словарь класса между экземплярами
+        self.R.blk = frozenset()
         self.nets = {}          # name -> (src_pin, [sink pins])
         self.margin = margin
         self.weak = set()       # цепи со слабым источником: повторитель сразу у источника
