@@ -16,7 +16,9 @@ def seqctl_netlist():
     nl = Netlist()
     for n in INS:
         nl.inp(n)
-    nl.nor("run", ["bStop", "hlt", "bRst", "nrun"])
+    nl.nor("nstop", ["bStop", "hlt", "bRst"])
+    nl.NOT("nstop", "stop")
+    nl.nor("run", ["stop", "nrun"])
     nl.nor("nrun", ["bStart", "run"])
     nl.nor("x1", ["bStart", "bStep", "bRst"])
     nl.nor("inj", ["x1", "runD"])           # нажатие при остановленной машине
@@ -48,3 +50,45 @@ def seqctl_grid():
             raise RuntimeError("seqctl: не удалось разместить")
         return g, {"ext": ext}
     return cached(f"seqctl_{CTL_NI}x{CTL_NJ}", build)
+
+
+def build_seq(core, ox, oz, nw=4, a1=6, a2=6, a3=6, a4=10, width=22, mod="seq"):
+    """Разместить секвенсор в Core: модуль логики + цепочки задержек; зарегистрировать порты и цепи.
+    Внешние входы (порты (mod,'bStart'..'hlt')), выходы ('p1','p2','p3','rst','run') — пины на модуле логики/цепочках.
+    Возвращает dict с геометрией и временами (игровые тики)."""
+    g = core.g
+    ctl, meta = seqctl_grid()
+    for p, b in ctl.b.items():
+        g.b[(p[0] + ox, p[1], p[2] + oz)] = type(b)(b.name, b.props)
+    ext = meta["ext"]
+    for n in INS:
+        i, j, l = ext[n][0]
+        core.port(f"{mod}.ctl", n, ox + 2 * i, oz + 2 * j, "W")
+    for n in OUTS:
+        i, j, l = ext[n][0]
+        core.port(f"{mod}.ctl", n, ox + 2 * i, oz + 2 * j, "E")
+    # цепочки справа от логики, друг под другом
+    cx = ox + 2 * CTL_NI + 16
+    z = oz
+    chains = {}
+    for name, n in (("dw", nw), ("dr", 1), ("d1", a1), ("d2", a2), ("d3", a3), ("d4", a4)):
+        sub = Grid()
+        c = delay_chain(sub, 0, 0, n, 4, width)
+        for p, b in sub.b.items():
+            g.b[(p[0] + cx, p[1], p[2] + z)] = b
+        (xi, _, zi), (xo, _, zo) = c["in"], c["out"]
+        core.port(f"{mod}.{name}", "in", cx + xi, z + zi, "W")
+        core.port(f"{mod}.{name}", "out", cx + xo, z + zo, c["out_dir"])
+        chains[name] = c
+        z += c["bbox"][3] + 8
+    N = core.net
+    N(f"{mod}.q", (f"{mod}.ctl", "q"), [(f"{mod}.dw", "in"), (f"{mod}.d1", "in")], weak=True)
+    N(f"{mod}.qd", (f"{mod}.dw", "out"), [(f"{mod}.ctl", "qd")])
+    N(f"{mod}.p1", (f"{mod}.d1", "out"), [(f"{mod}.d2", "in")])
+    N(f"{mod}.p2", (f"{mod}.d2", "out"), [(f"{mod}.d3", "in")])
+    N(f"{mod}.p3", (f"{mod}.d3", "out"), [(f"{mod}.d4", "in"), (f"{mod}.ctl", "p3")])
+    N(f"{mod}.fb", (f"{mod}.d4", "out"), [(f"{mod}.ctl", "fb")])
+    N(f"{mod}.run", (f"{mod}.ctl", "run"), [(f"{mod}.dr", "in")], weak=True)
+    N(f"{mod}.runD", (f"{mod}.dr", "out"), [(f"{mod}.ctl", "runD")])
+    ticks = {k: c["ticks"] for k, c in chains.items()}
+    return {"chains": chains, "ticks": ticks, "bbox": (ox, oz, cx + width + 4, z)}

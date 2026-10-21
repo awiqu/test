@@ -34,6 +34,7 @@ class Core:
         self.ports = {}          # (module, port) -> (x, z, dir)
         self.nets = []           # (name, src, [sinks])
         self.floor_y = -1
+        self.weak = set()        # цепи со слабым источником (выход решёточного модуля): повторитель у источника
 
     # ---------- вспомогательное
     def port(self, mod, name, x, z, d):
@@ -55,7 +56,9 @@ class Core:
         self.g.dust(x, 0, z)
         self.port("ext", name, x, z, d)
 
-    def net(self, name, src, sinks):
+    def net(self, name, src, sinks, weak=False):
+        if weak:
+            self.weak.add(name)
         sp = self.ports[src] if isinstance(src, tuple) else src
         self.nets.append((name, sp, [self.ports[s] if isinstance(s, tuple) else s for s in sinks]))
 
