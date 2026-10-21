@@ -304,8 +304,9 @@ class Router:
         g.in_dirs[idx] = d
 
     # ---- повторители
-    def assign_repeaters(self, sources, every=11, reverse=None):
+    def assign_repeaters(self, sources, every=11, reverse=None, start=None):
         reverse = reverse or {}
+        start = start or {}
         """sources: {net: [узлы-источники (i,j,l)]}. Повторители ставятся наружу от «ядра» цепи
         (минимальное поддерево, соединяющее все источники) — внутри ядра сигнал двунаправленный."""
         self.reps = {}
@@ -364,7 +365,7 @@ class Router:
                             core_edges.add(frozenset((n, m)))
                 if len(core_edges) * 2 > 26:
                     self.warn.append((net, "ядро цепи длиннее 13 клеток", len(core_edges) * 2))
-            dist = {n: 0 for n in srcs}
+            dist = {n: start.get(net, 0) for n in srcs}
             dq = deque(srcs)
             seen = set(srcs)
             while dq:

@@ -21,6 +21,7 @@ class GlobalRouter:
         self.R = PFRouter(self.ni, self.nj, x0, z0, y0, mat)
         self.nets = {}          # name -> (src_pin, [sink pins])
         self.margin = margin
+        self.weak = set()       # цепи со слабым источником: повторитель сразу у источника
 
     def node_of(self, x, z):
         if (x - self.x0) % 2 or (z - self.z0) % 2:
@@ -81,7 +82,7 @@ class GlobalRouter:
         if not ok:
             return False
         srcmap = {name: [self._pinnode(src)] for name, (src, sinks) in self.nets.items()}
-        R.assign_repeaters(srcmap)
+        R.assign_repeaters(srcmap, start={n: 9 for n in self.weak})
         # регенерация перед каждым приёмником: последняя средина улицы -> повторитель в сторону порта
         for name, (src, sinks) in self.nets.items():
             edges = R.edges_of_net.get(name, [])
