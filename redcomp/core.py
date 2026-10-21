@@ -34,6 +34,8 @@ class Core:
         self.ports = {}          # (module, port) -> (x, z, dir)
         self.nets = []           # (name, src, [sinks])
         self.floor_y = -1
+        self.weak_ports = set()   # (модуль, порт) со слабым источником
+        self.mod_bbox = {}
         self.weak = set()        # цепи со слабым источником (выход решёточного модуля): повторитель у источника
 
     # ---------- вспомогательное

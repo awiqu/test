@@ -132,6 +132,7 @@ class GlobalRouter:
         out = res.stdout.split("\n")
         if out[0] != "OK":
             R.failed = out[0]
+            R.overuse = [ln for ln in out[1:] if ln.startswith("O ")]
             return False
         R.routes = {}
         cur = None

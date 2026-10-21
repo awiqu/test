@@ -170,7 +170,14 @@ int main() {
         for (int r = 0; r < NR; r++) if (users[r].size() > 1) hist[r] += 0.5f * (users[r].size() - 1);
         pf *= pfm;
     }
-    if (!ok) { printf("OVERUSE\n"); return 2; }
+    if (!ok) {
+        printf("OVERUSE\n");
+        for (int r = 0; r < NR; r++) if (users[r].size() > 1) {
+            if (r < 2 * N) printf("O n %d %d %d\n", (r >> 1) % ni, (r >> 1) / ni, r & 1);
+            else { int q = r - 2 * N; int l = q & 1, dir = (q >> 1) & 1, c = q >> 2; printf("O s %d %d %d %d\n", c % ni, c / ni, dir, l); }
+        }
+        return 2;
+    }
     printf("OK\n");
     for (int k = 0; k < nn; k++) {
         printf("N %d\n", k);
