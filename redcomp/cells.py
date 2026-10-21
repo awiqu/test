@@ -50,8 +50,9 @@ def regbit(g: Grid, xd, zw, wr_x, sel_x, mat="stone"):
     g.solid(xd, 0, zd + 1, mat)                  # F
     g.comparator(xd, 0, zd + 2, "south", mode="subtract")   # C: сзади F, сбоку ~sel
     hop_down(g, sel_x, zd + 2, -1)               # ~sel
-    for x in range(xd + 1, sel_x - 1):
+    for x in range(xd + 2, sel_x - 1):
         g.dust(x, 0, zd + 2)
+    g.repeater(xd + 1, 0, zd + 2, "west")        # регенератор: боковой вход компаратора обязан быть ровно 15
     g.dust(xd, 0, zd + 3)                        # отвод к R
     return dict(W=zw, R=zw + 6)
 
