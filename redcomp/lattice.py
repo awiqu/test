@@ -200,7 +200,7 @@ class Router:
 
     def route_net(self, net, drivers, loads, ext_pins=()):
         """drivers: узлы (i,j) слой 0 (выходы вентилей); loads: [(gate, idx)]; ext_pins: [(i,j,l)] внешние выводы"""
-        pts = [(i, j, 0) for (i, j) in drivers] + list(ext_pins)
+        pts = [(i, j, 0) for (i, j) in drivers] + [tuple(p) for p in ext_pins]
         for p in pts:
             if self.node.get(p) not in (None, net):
                 return False
@@ -220,56 +220,83 @@ class Router:
             path, moves = res
             self.commit_path(path, moves, net)
             tree.update(path)
-        # 2) нагрузки
-        remaining = []
-        for (g, idx) in loads:
-            remaining.append((g, idx))
+        # 2) нагрузки: терминалы уже зарезервированы (g.in_dirs)
+        remaining = list(loads)
+        targets = {}
+        for (g, idx) in remaining:
+            d = g.in_dirs[idx]
+            t = (g.pos[0] + D[d][0], g.pos[1] + D[d][1], 0)
+            targets[(id(g), idx)] = t
         if not tree and remaining:
-            g, idx = remaining[0]
-            for d, (di, dj) in D.items():
-                key = self.skey(g.pos, (g.pos[0] + di, g.pos[1] + dj))
-                t = (g.pos[0] + di, g.pos[1] + dj)
-                if self.street.get((key, 0)) is None and self.inb(*t) and t not in self.gates and self.free_node(t[0], t[1], 0, net):
-                    tree.add((t[0], t[1], 0)); self.node[(t[0], t[1], 0)] = net
-                    self._claim_input((g, idx), d, key, net)
-                    remaining = remaining[1:]
-                    break
-            else:
-                return False
+            (g, idx) = remaining[0]
+            tree.add(targets[(id(g), idx)])
+            remaining = remaining[1:]
         while remaining:
             best = None
             for item in remaining:
                 (g, idx) = item
-                cands = []
-                for d, (di, dj) in D.items():
-                    t = (g.pos[0] + di, g.pos[1] + dj)
-                    key = self.skey(g.pos, t)
-                    if self.street.get((key, 0)) is not None:
-                        continue
-                    if not self.inb(*t) or t in self.gates:
-                        continue
-                    cands.append((d, (t[0], t[1], 0), key))
-                if not cands:
-                    return False
-                res = self.astar(list(tree), [c[1] for c in cands], net)
+                t = targets[(id(g), idx)]
+                if t in tree:
+                    best = (0, item, [t], [])
+                    break
+                res = self.astar(list(tree), [t], net)
                 if res is None:
                     continue
                 path, moves = res
-                cost = len(path)
-                if best is None or cost < best[0]:
-                    best = (cost, item, path, moves, cands)
+                if best is None or len(path) < best[0]:
+                    best = (len(path), item, path, moves)
             if best is None:
                 return False
-            cost, item, path, moves, cands = best
+            cost, item, path, moves = best
             self.commit_path(path, moves, net)
-            end = path[-1]
-            for c in cands:
-                if c[1] == end:
-                    self._claim_input(item, c[0], c[2], net)
-                    break
             tree.update(path)
             remaining.remove(item)
         return True
+
+    def reserve_inputs(self, gates, nets, tp, rng):
+        """каждому входу вентиля — своя улица; терминальный узел закрепляется за сетью"""
+        centers = {}
+        for name, nd in nets.items():
+            pts = [tp(g) for g in nd["drv"]] + [g.pos for g, _ in nd["ld"]]
+            pts += [p[:2] for p in getattr(self, "_extpins", {}).get(name, [])]
+            if pts:
+                centers[name] = (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+        order = list(gates)
+        rng.shuffle(order)
+        for g in order:
+            free = []
+            for d, (di, dj) in D.items():
+                if d == g.odir:
+                    continue
+                t = (g.pos[0] + di, g.pos[1] + dj)
+                if not self.inb(*t) or t in self.gates:
+                    continue
+                free.append((d, t))
+            if len(free) < len(g.ins):
+                raise ValueError(f"вентиль {g.out}@{g.pos}: не хватает свободных улиц для входов")
+            # перебор назначений (<= 3! вариантов)
+            import itertools
+            best = None
+            for perm in itertools.permutations(free, len(g.ins)):
+                cost = 0.0
+                okp = True
+                for idx, (d, t) in enumerate(perm):
+                    net = g.ins[idx]
+                    o = self.node.get((t[0], t[1], 0))
+                    if o is not None and o != net:
+                        okp = False; break
+                    c = centers.get(net, t)
+                    cost += abs(t[0] - c[0]) + abs(t[1] - c[1])
+                if okp and (best is None or cost < best[0]):
+                    best = (cost, perm)
+            if best is None:
+                raise ValueError(f"вентиль {g.out}@{g.pos}: нет совместимых входных узлов")
+            for idx, (d, t) in enumerate(best[1]):
+                net = g.ins[idx]
+                self.node[(t[0], t[1], 0)] = net
+                key = self.skey(g.pos, t)
+                self.street[(key, 0)] = ("in", net)
+                g.in_dirs[idx] = d
 
     def _claim_input(self, gi, d, key, net):
         g, idx = gi
@@ -277,21 +304,67 @@ class Router:
         g.in_dirs[idx] = d
 
     # ---- повторители
-    def assign_repeaters(self, sources, every=11):
-        """sources: {net: [узлы-источники (i,j,l)]}; заполняет self.reps {(i,j,i2,j2,l): направление потока (от a к b)}"""
+    def assign_repeaters(self, sources, every=11, reverse=None):
+        reverse = reverse or {}
+        """sources: {net: [узлы-источники (i,j,l)]}. Повторители ставятся наружу от «ядра» цепи
+        (минимальное поддерево, соединяющее все источники) — внутри ядра сигнал двунаправленный."""
         self.reps = {}
+        self.warn = []
+        from collections import deque
         for net, edges in self.edges_of_net.items():
-            adj = defaultdict(list)       # узел -> [(узел2, kind, key, l)]
+            adj = defaultdict(list)
             for (a, b, kind) in edges:
                 key = self.skey((a[0], a[1]), (b[0], b[1]))
                 adj[a].append((b, kind, key, a[2]))
                 adj[b].append((a, kind, key, b[2]))
+            if net in reverse:
+                # цепь-сток: корень — внешний пин; повторители направлены К пину
+                roots = [p for p in reverse[net] if p in adj]
+                if not roots:
+                    continue
+                dist = {n: 0 for n in roots}
+                dq = deque(roots)
+                seen = set(roots)
+                while dq:
+                    n = dq.popleft()
+                    for (m, kind, key, l) in adj[n]:
+                        if m in seen:
+                            continue
+                        seen.add(m)
+                        c = dist[n] + 2
+                        if kind == "flat" and c >= every:
+                            # поток от m к n (к корню)
+                            self.reps[(key, l, m[:2], n[:2])] = True
+                            c = 1
+                        dist[m] = c
+                        dq.append(m)
+                continue
             srcs = [n for n in sources.get(net, []) if n in adj]
             if not srcs:
                 continue
-            # BFS: узел -> (счётчик клеток от источника/повторителя)
+            core_edges = set()
+            if len(srcs) > 1:
+                # обрезаем листья, не являющиеся источниками
+                deg = {n: len(adj[n]) for n in adj}
+                alive = set(adj.keys())
+                dq0 = deque([n for n in alive if deg[n] <= 1 and n not in srcs])
+                while dq0:
+                    n = dq0.popleft()
+                    if n not in alive:
+                        continue
+                    alive.discard(n)
+                    for (m, kind, key, l) in adj[n]:
+                        if m in alive:
+                            deg[m] -= 1
+                            if deg[m] <= 1 and m not in srcs:
+                                dq0.append(m)
+                for n in alive:
+                    for (m, kind, key, l) in adj[n]:
+                        if m in alive:
+                            core_edges.add(frozenset((n, m)))
+                if len(core_edges) * 2 > 26:
+                    self.warn.append((net, "ядро цепи длиннее 13 клеток", len(core_edges) * 2))
             dist = {n: 0 for n in srcs}
-            from collections import deque
             dq = deque(srcs)
             seen = set(srcs)
             while dq:
@@ -300,11 +373,10 @@ class Router:
                     if m in seen:
                         continue
                     seen.add(m)
-                    c = dist[n] + 2          # средина + узел
-                    if kind == "flat" and c >= every:
-                        # повторитель на средине (между n и m), поток n -> m
+                    c = dist[n] + 2
+                    if kind == "flat" and c >= every and frozenset((n, m)) not in core_edges:
                         self.reps[(key, l, n[:2], m[:2])] = True
-                        c = 1                # после повторителя: до узла m одна клетка
+                        c = 1
                     dist[m] = c
                     dq.append(m)
 
@@ -383,7 +455,7 @@ class Design:
                 d[n]["ld"].append((g, idx))
         return d
 
-    def place(self, iters=60000, fixed=None, free_cols=None):
+    def place(self, iters=60000, fixed=None, free_cols=None, flow_w=0.0):
         """fixed: {имя_внешнего_сигнала: (i,j)}"""
         rng = self.rng
         gates = self.nl.gates
@@ -391,7 +463,8 @@ class Design:
         ext = dict(fixed or {})
         used = set()
         # начальное размещение: случайно по свободным узлам с шагом (чтобы остались улицы)
-        cells = [(i, j) for i in range(self.ni) for j in range(self.nj)]
+        m = getattr(self, "margin", 1)
+        cells = [(i, j) for i in range(m, self.ni - m) for j in range(m, self.nj - m)]
         rng.shuffle(cells)
         for g in gates:
             while True:
@@ -423,6 +496,26 @@ class Design:
                         free += 1
                 if free < 1 + len(g.ins):
                     c += 30 * (1 + len(g.ins) - free)
+            poss = [g.pos for g in gates]
+            for ii in range(len(poss)):
+                pi_ = poss[ii]
+                for jj in range(ii + 1, len(poss)):
+                    pj_ = poss[jj]
+                    dd_ = abs(pi_[0] - pj_[0]) + abs(pj_[1] - pi_[1])
+                    if dd_ == 1:
+                        c += 100
+                    elif dd_ == 2:
+                        c += 6
+                    elif dd_ == 3:
+                        c += 1.5
+            # поток слева направо: нагрузка не левее драйвера
+            if flow_w:
+                for g in gates:
+                    for n_ in g.ins:
+                        for dg in nets[n_]["drv"]:
+                            back = dg.pos[0] - g.pos[0]
+                            if back > -1:
+                                c += flow_w * (back + 1)
             tmap = {}
             for g in gates:
                 t = tpos(g)
@@ -433,6 +526,10 @@ class Design:
                 if p_ in tmap and tmap[p_] != n_:
                     c += 40
             for name, nd in nets.items():
+                if len(nd["drv"]) > 1:
+                    dp = [tpos(g) for g in nd["drv"]]
+                    xs_ = [p[0] for p in dp]; ys_ = [p[1] for p in dp]
+                    c += 2.5 * ((max(xs_) - min(xs_)) + (max(ys_) - min(ys_)))
                 pts = []
                 for g in nd["drv"]: pts.append(tpos(g))
                 for (g, idx) in nd["ld"]: pts.append(g.pos)
@@ -450,7 +547,7 @@ class Design:
             g = rng.choice(gates)
             old = (g.pos, g.odir)
             if rng.random() < 0.7:
-                c = (rng.randrange(self.ni), rng.randrange(self.nj))
+                c = (rng.randrange(m, self.ni - m), rng.randrange(m, self.nj - m))
                 other = next((h for h in gates if h.pos == c), None)
                 if other is not None and other is not g:
                     other.pos, g.pos = g.pos, other.pos
@@ -471,44 +568,78 @@ class Design:
         self.cost = cur
         return cur
 
-    def route(self, ext_pins=None, order=None, seed=0):
-        """ext_pins: {имя: (i,j,l)} позиции внешних входов/выходов. Возвращает Router или None"""
+    def route(self, ext_pins=None, ext_src=None, order=None, seed=0):
+        """ext_pins: {имя: (i,j,l) или [(i,j,l),...]}; ext_src: {имя: [пины-источники]} (по умолчанию: все пины
+        внешних входов — источники). Возвращает Router или None."""
         R = Router(self.ni, self.nj, self.ox, self.oz, self.y0)
         gates = self.nl.gates
         R.place_gates(gates)
         nets = self.nets()
-        ext_pins = ext_pins or {}
+        pins = {}
+        for n, p in (ext_pins or {}).items():
+            pins[n] = [p] if isinstance(p, tuple) else list(p)
+        # внешние пины занимают узлы заранее
+        for n, pl in pins.items():
+            for p in pl:
+                if R.node.get(tuple(p)) not in (None, n):
+                    raise ValueError(f"пин {n}@{p} конфликтует с {R.node.get(tuple(p))}")
+                R.node[tuple(p)] = n
+        R._extpins = pins
+        def tp0(g):
+            return (g.pos[0] + D[g.odir][0], g.pos[1] + D[g.odir][1])
+        last_err = None
+        for attempt in range(60):
+            # откат предыдущей попытки
+            for k in [k for k, v in R.street.items() if isinstance(v, tuple) and v[0] == "in"]:
+                del R.street[k]
+            for g in gates:
+                g.in_dirs = {}
+            for k in [k for k, v in R.node.items() if not isinstance(v, tuple) and k[2] == 0]:
+                if not any(k[:2] == p[:2] for pl in pins.values() for p in pl) and not any(tp0(g)[:2] == k[:2] for g in gates):
+                    del R.node[k]
+            try:
+                R.reserve_inputs(gates, nets, tp0, random.Random(seed * 100 + attempt))
+                last_err = None
+                break
+            except ValueError as e:
+                last_err = e
+        if last_err is not None:
+            self.failed = str(last_err)
+            self.R = R
+            return None
         names = list(nets.keys())
-        for n in ext_pins:
+        for n in pins:
             if n not in nets: names.append(n)
         rng = random.Random(seed)
+        def tp(g):
+            return (g.pos[0] + D[g.odir][0], g.pos[1] + D[g.odir][1])
         def span(n):
             nd = nets.get(n, {"drv": [], "ld": []})
-            pts = [(g.pos[0] + D[g.odir][0], g.pos[1] + D[g.odir][1]) for g in nd["drv"]] + [g.pos for g, _ in nd["ld"]]
-            if n in ext_pins: pts.append(ext_pins[n][:2])
+            pts = [tp(g) for g in nd["drv"]] + [g.pos for g, _ in nd["ld"]] + [p[:2] for p in pins.get(n, [])]
             if not pts: return 0
             xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
             return (max(xs) - min(xs)) + (max(ys) - min(ys))
         names.sort(key=lambda n: (span(n) + rng.random() * (0 if order is None else order)))
+        # внешние пины сначала занимают узлы
         for name in names:
             nd = nets.get(name, {"drv": [], "ld": []})
-            drivers = [(g.pos[0] + D[g.odir][0], g.pos[1] + D[g.odir][1]) for g in nd["drv"]]
-            pins = []
-            if name in ext_pins:
-                pins.append(ext_pins[name])
-            ok = R.route_net(name, drivers, nd["ld"], ext_pins=pins)
+            drivers = [tp(g) for g in nd["drv"]]
+            ok = R.route_net(name, drivers, nd["ld"], ext_pins=pins.get(name, []))
             if not ok:
                 self.failed = name
+                self.R = R
                 return None
         srcmap = {}
         for name in names:
             nd = nets.get(name, {"drv": [], "ld": []})
-            srcmap[name] = [(g.pos[0] + D[g.odir][0], g.pos[1] + D[g.odir][1], 0) for g in nd["drv"]]
-            if name in ext_pins and name in self.nl.ext_in:
-                srcmap[name].append(ext_pins[name])
+            srcmap[name] = [(tp(g)[0], tp(g)[1], 0) for g in nd["drv"]]
+            if ext_src is not None and name in ext_src:
+                srcmap[name] += list(ext_src[name])
+            elif name in self.nl.ext_in:
+                srcmap[name] += pins.get(name, [])
         R.assign_repeaters(srcmap)
+        self.R = R
         return R
-
 
 def dump(R: Router, d: "Design"):
     """ASCII-картинка решётки"""
@@ -541,3 +672,294 @@ def dump(R: Router, d: "Design"):
                 line += "    "
             out.append(line)
     return "\n".join(out)
+
+
+# ======================= PathFinder (негоциируемая трассировка) =======================
+
+class PFRouter(Router):
+    """Router с итеративной трассировкой. Жёсткие ресурсы: узлы вентилей, пины, терминалы входов/выходов,
+    улицы факелов/входов. Мягкие: остальные узлы и улицы на слоях 0/2 (ёмкость 1)."""
+
+    def setup_hard(self, nets_spec):
+        """nets_spec: name -> {'terms': [узлы слой0 (i,j,l)], ...} — все терминалы уже занимают узлы (self.node)"""
+        self.hard_node = {}
+        for k, v in self.node.items():
+            self.hard_node[k] = v
+        self.hard_street = dict(self.street)
+        self.use = defaultdict(set)       # ресурс -> множество сетей
+        self.hist = defaultdict(float)
+        self.routes = {}                  # net -> (path-list of (path,moves))
+
+    # ресурсы
+    @staticmethod
+    def rn(i, j, l):
+        return ("n", i, j, l)
+
+    @staticmethod
+    def rs(key, l):
+        return ("s", key, l)
+
+    def _hard_blocked_node(self, i, j, l, net):
+        o = self.hard_node.get((i, j, l))
+        return o is not None and o != net
+
+    def _hard_blocked_street(self, key, l, net):
+        o = self.hard_street.get((key, l))
+        if o is None:
+            return False
+        if isinstance(o, tuple) and o[0] == "in" and o[1] == net:
+            return False
+        return True
+
+    def pf_neighbors(self, n, net, pf):
+        i, j, l = n
+        for d, (di, dj) in D.items():
+            i2, j2 = i + di, j + dj
+            if not self.inb(i2, j2):
+                continue
+            key = self.skey((i, j), (i2, j2))
+            touches = self._touches_gate(key)
+            if l == 0 and (i2, j2) in self.gates:
+                continue
+            # плоский
+            if not (l == 0 and touches) and not self._hard_blocked_street(key, l, net) \
+                    and not self._hard_blocked_node(i2, j2, l, net) \
+                    and key not in self._cur_ramp \
+                    and not (l == 2 and ((i2, j2) in self._cur_low or (i, j) in self._cur_low)):
+                if not (l == 2 and (i2, j2) in self._air_hard) and not (l == 2 and (i, j) in self._air_hard):
+                    res = [self.rn(i2, j2, l), self.rs(key, l)]
+                    yield (i2, j2, l), self._cost(res, net, pf), ("flat", key)
+            # рампа
+            if touches:
+                continue
+            if self._hard_blocked_street(key, 0, net) or self._hard_blocked_street(key, 2, net):
+                continue
+            if l == 0:
+                low, high = (i, j), (i2, j2)
+            else:
+                low, high = (i2, j2), (i, j)
+            if low in self.gates or (high in self.gates and False):
+                continue
+            if self._hard_blocked_node(low[0], low[1], 0, net) or self._hard_blocked_node(high[0], high[1], 2, net) \
+                    or self._hard_blocked_node(low[0], low[1], 2, net):
+                continue
+            if self.hard_node.get((low[0], low[1], 2)) is not None:
+                continue
+            if key in self._cur_flat or low in self._cur_d2:
+                continue
+            res = [self.rs(key, 0), self.rs(key, 2), self.rn(low[0], low[1], 2), self.rn(high[0], high[1], 2),
+                   self.rn(low[0], low[1], 0)]
+            target = (i2, j2, 2) if l == 0 else (i2, j2, 0)
+            yield target, self._cost(res, net, pf) + 2.0, ("ramp", key, low, high)
+
+    def _cost(self, res, net, pf):
+        c = 0.0
+        for r in res:
+            users = self.use.get(r)
+            others = 0
+            if users:
+                others = len(users - {net})
+            c += (1.0 + self.hist[r]) * (1.0 + pf * others)
+        return c
+
+    def pf_astar(self, sources, target, net, pf):
+        tgt = (target[0], target[1])
+        def h(n):
+            return abs(n[0] - tgt[0]) + abs(n[1] - tgt[1])
+        openq = []
+        gscore = {}
+        came = {}
+        for s in sources:
+            gscore[s] = 0.0
+            heapq.heappush(openq, (h(s), 0.0, s))
+        while openq:
+            f, g, n = heapq.heappop(openq)
+            if g > gscore.get(n, 1e18):
+                continue
+            if n == target:
+                path = [n]; moves = []
+                while n in came:
+                    p, mv = came[n]
+                    moves.append(mv); n = p; path.append(n)
+                path.reverse(); moves.reverse()
+                return path, moves
+            lastkey = came[n][1][1] if n in came else None
+            for n2, c, mv in self.pf_neighbors(n, net, pf):
+                if mv[1] == lastkey:
+                    continue
+                ng = g + c
+                if ng < gscore.get(n2, 1e18):
+                    gscore[n2] = ng
+                    came[n2] = (n, mv)
+                    heapq.heappush(openq, (ng + h(n2), ng, n2))
+        return None
+
+    def _path_resources(self, path, moves):
+        res = []
+        for n in path:
+            res.append(self.rn(*n))
+        for (a, b), mv in zip(zip(path[:-1], path[1:]), moves):
+            if mv[0] == "flat":
+                res.append(self.rs(mv[1], a[2]))
+            else:
+                key, low, high = mv[1], mv[2], mv[3]
+                res += [self.rs(key, 0), self.rs(key, 2), self.rn(low[0], low[1], 2)]
+        return res
+
+    def route_all(self, terms, iters=40, pf0=0.6, pf_mult=1.6, order=None, verbose=False):
+        """terms: net -> [терминальные узлы (i,j,l)]; возвращает True при успехе."""
+        self._air_hard = set()
+        self._cur_ramp, self._cur_flat, self._cur_low, self._cur_d2 = set(), set(), set(), set()
+        names = list(terms.keys())
+        def span(n):
+            pts = terms[n]
+            xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+            return (max(xs) - min(xs)) + (max(ys) - min(ys))
+        names.sort(key=span)
+        pf = pf0
+        for it in range(iters):
+            for net in names:
+                # rip-up
+                for r in self._net_res.get(net, ()) if hasattr(self, "_net_res") else ():
+                    self.use[r].discard(net)
+                if not hasattr(self, "_net_res"):
+                    self._net_res = {}
+                pts = [tuple(p) for p in terms[net]]
+                if len(pts) < 2:
+                    self._net_res[net] = set(self.rn(*p) for p in pts)
+                    for r in self._net_res[net]:
+                        self.use[r].add(net)
+                    self.routes[net] = []
+                    continue
+                tree = {pts[0]}
+                rest = list(pts[1:])
+                res_all = {self.rn(*pts[0])}
+                segs = []
+                self._cur_ramp, self._cur_flat, self._cur_low, self._cur_d2 = set(), set(), set(), set()
+                if pts[0][2] == 2:
+                    self._cur_d2.add((pts[0][0], pts[0][1]))
+                while rest:
+                    best = None
+                    for t in rest:
+                        r_ = self.pf_astar(list(tree), t, net, pf)
+                        if r_ is None:
+                            continue
+                        cost = len(r_[0])
+                        if best is None or cost < best[0]:
+                            best = (cost, t, r_)
+                    if best is None:
+                        self.failed = net
+                        return False
+                    _, t, (path, moves) = best
+                    segs.append((path, moves))
+                    tree.update(path)
+                    for n_ in path:
+                        if n_[2] == 2:
+                            self._cur_d2.add((n_[0], n_[1]))
+                    for (a_, b_), mv in zip(zip(path[:-1], path[1:]), moves):
+                        if mv[0] == "ramp":
+                            self._cur_ramp.add(mv[1]); self._cur_low.add(mv[2])
+                        else:
+                            self._cur_flat.add(mv[1])
+                    res_all.update(self._path_resources(path, moves))
+                    rest.remove(t)
+                # занимаем
+                for r in res_all:
+                    self.use[r].add(net)
+                self._net_res[net] = res_all
+                self.routes[net] = segs
+            # перегрузка
+            over = [r for r, u in self.use.items() if len(u) > 1]
+            if verbose:
+                print(f"  итерация {it}: перегрузка {len(over)}, pf={pf:.2f}")
+            if not over:
+                self._commit_all(terms)
+                return True
+            for r in over:
+                self.hist[r] += 0.5 * (len(self.use[r]) - 1)
+            pf *= pf_mult
+        self.failed = "перегрузка не снята"
+        return False
+
+    def _commit_all(self, terms):
+        for net, segs in self.routes.items():
+            for path, moves in segs:
+                self.commit_path(path, moves, net)
+            for p in terms.get(net, []):
+                self.node[tuple(p)] = net
+
+
+def _design_route_pf(self, ext_pins=None, ext_src=None, seed=0, iters=60, verbose=False):
+    """PathFinder-маршрутизация. Возвращает Router или None"""
+    R = PFRouter(self.ni, self.nj, self.ox, self.oz, self.y0)
+    gates = self.nl.gates
+    R.place_gates(gates)
+    nets = self.nets()
+    pins = {}
+    for n, p in (ext_pins or {}).items():
+        pins[n] = [tuple(p)] if isinstance(p, tuple) else [tuple(q) for q in p]
+    for n, pl in pins.items():
+        for p in pl:
+            if R.node.get(p) not in (None, n):
+                raise ValueError(f"пин {n}@{p} конфликтует с {R.node.get(p)}")
+            R.node[p] = n
+    R._extpins = pins
+    def tp0(g):
+        return (g.pos[0] + D[g.odir][0], g.pos[1] + D[g.odir][1])
+    last_err = None
+    for attempt in range(80):
+        for k in [k for k, v in R.street.items() if isinstance(v, tuple) and v[0] == "in"]:
+            del R.street[k]
+        for g in gates:
+            g.in_dirs = {}
+        keep = set((p[0], p[1]) for pl in pins.values() for p in pl) | set(tp0(g) for g in gates)
+        for k in [k for k, v in R.node.items() if not isinstance(v, tuple) and k[2] == 0 and (k[0], k[1]) not in keep]:
+            del R.node[k]
+        try:
+            R.reserve_inputs(gates, nets, tp0, random.Random(seed * 100 + attempt))
+            last_err = None
+            break
+        except ValueError as e:
+            last_err = e
+    if last_err is not None:
+        self.failed = str(last_err); self.R = R
+        return None
+    terms = {}
+    for name, nd in nets.items():
+        ts = [(tp0(g)[0], tp0(g)[1], 0) for g in nd["drv"]]
+        for (g, idx) in nd["ld"]:
+            dd = g.in_dirs[idx]
+            ts.append((g.pos[0] + D[dd][0], g.pos[1] + D[dd][1], 0))
+        ts += pins.get(name, [])
+        # убрать дубликаты, сохранить порядок
+        seen = []
+        for t in ts:
+            if t not in seen:
+                seen.append(t)
+        terms[name] = seen
+    for n in pins:
+        if n not in terms:
+            terms[n] = list(dict.fromkeys(pins[n]))
+    R.setup_hard(terms)
+    ok = R.route_all(terms, iters=iters, verbose=verbose)
+    if not ok:
+        self.failed = R.failed; self.R = R
+        return None
+    srcmap = {}
+    for name, nd in nets.items():
+        srcmap[name] = [(tp0(g)[0], tp0(g)[1], 0) for g in nd["drv"]]
+    for name in set(list(srcmap) + list(pins)):
+        srcmap.setdefault(name, [])
+        if ext_src is not None and name in ext_src:
+            srcmap[name] += [tuple(p) for p in ext_src[name]]
+        elif name in self.nl.ext_in:
+            srcmap[name] += pins.get(name, [])
+    reverse = {}
+    for name, nd in nets.items():
+        if nd["drv"] and not nd["ld"] and name in pins:
+            reverse[name] = list(pins[name])
+    R.assign_repeaters(srcmap, reverse=reverse)
+    self.R = R
+    return R
+
+Design.route_pf = _design_route_pf
