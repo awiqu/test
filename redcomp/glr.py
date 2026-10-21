@@ -1,10 +1,15 @@
 """Глобальный маршрутизатор: соединяет порты готовых модулей на решётке (шаг 2), два слоя + рампы."""
+import os
+import subprocess
 import time
 from collections import defaultdict
 from .grid import Grid
 from .lattice import PFRouter, D
 
 DIRV = {"E": (1, 0), "W": (-1, 0), "S": (0, 1), "N": (0, -1)}
+
+
+PF_BIN = os.path.join(os.path.dirname(__file__), "..", "build", "pf")
 
 
 class GlobalRouter:
@@ -70,7 +75,7 @@ class GlobalRouter:
         R.setup_hard(terms)
         R._air_hard = set()
         t0 = time.time()
-        ok = R.route_all(terms, iters=iters, verbose=verbose)
+        ok = self._route_cpp(terms, iters, verbose) if os.path.exists(PF_BIN) else R.route_all(terms, iters=iters, verbose=verbose)
         if verbose:
             print(f"  маршрутизация: {'успех' if ok else 'НЕУДАЧА '+str(R.failed)}, {time.time()-t0:.1f} c")
         if not ok:
@@ -92,6 +97,56 @@ class GlobalRouter:
                 for k2 in [k for k in R.reps if k[0] == key and k[1] == n[2]]:
                     del R.reps[k2]
                 R.reps[(key, n[2], other[:2], n[:2])] = True
+        return True
+
+    def _route_cpp(self, terms, iters, verbose):
+        """PathFinder в C++ (redcomp/cpp/pf.cpp), результат кладётся в R.routes как у PFRouter.route_all"""
+        R = self.R
+        names = list(terms)
+        idx = {n: k for k, n in enumerate(names)}
+        L = [f"{R.ni} {R.nj}", str(len(R.blk))]
+        L += [f"{i} {j}" for (i, j) in R.blk]
+        pb = []
+        for (key, l), v in R.street.items():
+            if l == 0 and isinstance(v, tuple) and v[0] == "pinblock":
+                (a, b) = key
+                pb.append(f"{a[0]} {a[1]} {0 if b[0] > a[0] or (b == (a[0] + 1, a[1])) else 1}")
+        L.append(str(len(pb))); L += pb
+        po = [f"{i} {j} {idx[nm]}" for (i, j), nm in R.pin_nodes.items() if nm in idx]
+        L.append(str(len(po))); L += po
+        L.append(str(len(names)))
+        for n in names:
+            pts = terms[n]
+            L.append(str(len(pts)) + " " + " ".join(f"{p[0]} {p[1]}" for p in pts))
+        L.append(f"{iters} 0.6 1.6")
+        res = subprocess.run([PF_BIN], input="\n".join(L) + "\n", capture_output=True, text=True)
+        if verbose:
+            print(res.stderr, end="")
+        out = res.stdout.split("\n")
+        if out[0] != "OK":
+            R.failed = out[0]
+            return False
+        R.routes = {}
+        cur = None
+        for ln in out[1:]:
+            if ln.startswith("N "):
+                cur = names[int(ln[2:])]
+                R.routes[cur] = []
+            elif ln == "P":
+                R.routes[cur].append(([], []))
+            elif ln.startswith("n "):
+                _, i, j, l = ln.split()
+                R.routes[cur][-1][0].append((int(i), int(j), int(l)))
+        for net, segs in R.routes.items():
+            for path, moves in segs:
+                for a, b in zip(path[:-1], path[1:]):
+                    key = R.skey((a[0], a[1]), (b[0], b[1]))
+                    if a[2] == b[2]:
+                        moves.append(("flat", key))
+                    else:
+                        low, high = ((a[0], a[1]), (b[0], b[1])) if a[2] == 0 else ((b[0], b[1]), (a[0], a[1]))
+                        moves.append(("ramp", key, low, high))
+        R._commit_all(terms)
         return True
 
     def _pinnode(self, pin):

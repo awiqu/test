@@ -85,6 +85,7 @@ def latch_row(g: Grid, ox, oz, n, pitch=4, mat="stone"):
         g.wall_torch(x - 2, 1, oz + 1, "south")           # переход: факел на южной грани стены (x-2,1,oz)
         g.dust(x - 2, 0, oz + 1)                          # ~шина под факелом -> вход L
         g.dust(x, 0, oz + 2)                              # Q
-        ports["d"].append((x, 0, oz - 1))
+        g.dust(x, 0, oz - 1); g.dust(x, 0, oz - 2)
+        ports["d"].append((x, 0, oz - 2))
         ports["q"].append((x, 0, oz + 2))
     return ports
