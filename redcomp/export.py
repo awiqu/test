@@ -163,8 +163,10 @@ def tiles(g: Grid, tile=96):
 def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=(0, 0, 0)):
     """датапак: data/<name>/structure/*.nbt + function/build.mcfunction (размещает плитки относительно ~ ~ ~
     и затем /clone на месте — чтобы сработали обновления блоков). Возвращает число плиток."""
+    import shutil
     ns = name
     root = os.path.join(outdir, name)
+    shutil.rmtree(root, ignore_errors=True)
     os.makedirs(os.path.join(root, "data", ns, "structure"), exist_ok=True)
     os.makedirs(os.path.join(root, "data", ns, "function"), exist_ok=True)
     with open(os.path.join(root, "pack.mcmeta"), "w") as f:
@@ -172,14 +174,16 @@ def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=
                             "min_format": [107, 1], "max_format": [107, 1]}}, f)
     gx0, gy0, gz0 = anchor          # координата сетки, которая попадёт в ~ ~ ~
     lines = [f"# {name}: построить компьютер; координата сетки {anchor} попадает в ~ ~ ~"]
-    tl = tiles(g, tile)
+    # Одна общая структура: на границах плиток «updateShapeAtEdge» ломает факелы, чья опора лежит в соседней плитке.
+    (bx0, by0, bz0), (bx1, by1, bz1) = bounds(g)
+    size = (bx1 - bx0 + 1, by1 - by0 + 1, bz1 - bz0 + 1)
+    with open(os.path.join(root, "data", ns, "structure", "full.nbt"), "wb") as f:
+        f.write(structure_nbt(g.b, (bx0, by0, bz0), size))
+    lines.append(f"place template {ns}:full ~{bx0 - gx0 + base[0]} ~{by0 - gy0 + base[1]} ~{bz0 - gz0 + base[2]}")
     upd = []
+    tl = tiles(g, tile)            # плитки нужны только для /clone (лимит 32768 блоков на команду)
     for (ti, tj), ((ox, oy, oz), (sx, sy, sz), bl) in sorted(tl.items()):
-        fn = f"t{ti}_{tj}"
-        with open(os.path.join(root, "data", ns, "structure", fn + ".nbt"), "wb") as f:
-            f.write(structure_nbt(bl, (ox, oy, oz), (sx, sy, sz)))
         dx, dy, dz = ox - gx0 + base[0], oy - gy0 + base[1], oz - gz0 + base[2]
-        lines.append(f"place template {ns}:{fn} ~{dx} ~{dy} ~{dz}")
         upd.append(f"clone ~{dx} ~{dy} ~{dz} ~{dx+sx-1} ~{dy+sy-1} ~{dz+sz-1} ~{dx} ~{dy} ~{dz} replace force")
     lines += ["# второй проход: обновления соседей, чтобы факелы/повторители/компараторы начали работать"] + upd
     # маркер-«якорь» запоминает точку постройки; отложенные функции работают относительно него
