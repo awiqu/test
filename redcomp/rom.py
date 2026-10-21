@@ -56,8 +56,11 @@ def build_rom(core, ox, oz, words, mod="rom", gap=6):
         zk = z_row0 + 4 * k
         for p in chunks:
             xc, _, zc = p.out_ports[f"b{k}"]
-            for z in range(zc + 1, zk - 1):                 # спуск по y=0
-                g.dust(xc, 0, z)
+            for z in range(zc + 1, zk - 1):                 # спуск по y=0, повторитель каждые 10 клеток
+                if (z - zc) % 10 == 0 and z < zk - 3:
+                    g.repeater(xc, 0, z, "south")
+                else:
+                    g.dust(xc, 0, z)
             # рампа вверх по Z: (xc,0,zk-2) -> (xc,1,zk-1) -> (xc,2,zk)
             g.dust(xc, 0, zk - 2)
             g.solid(xc, 0, zk - 1); g.dust(xc, 1, zk - 1)
