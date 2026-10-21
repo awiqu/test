@@ -44,6 +44,15 @@ class Lab:
     def level(self, p):
         return self.S.power(p, self.g, self.O)
 
+    def sig(self, p):
+        """логический уровень порта: пыль power>0, повторитель/компаратор powered"""
+        b = self.g.get(*p)
+        if b is None:
+            return False
+        if b.name == "redstone_wire":
+            return self.level(p) > 0
+        return self.on(p)
+
     def state(self, p):
         """текст блокстейта через /data не доступен -> спрашиваем набором тестов"""
         return None

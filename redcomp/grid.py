@@ -132,3 +132,28 @@ class Grid:
             if not s_ and f6: c["south"] = "side"
             blk.props = {**c, "power": 0}
         return self
+
+
+def ascii_layer(g: "Grid", y, x0, x1, z0, z1):
+    sym = {"redstone_wire": "+", "redstone_torch": "T", "redstone_wall_torch": "t", "redstone_lamp": "L",
+           "redstone_block": "R", "lever": "l"}
+    arrow = {"east": ">", "west": "<", "north": "^", "south": "v"}
+    lines = []
+    for z in range(z0, z1 + 1):
+        row = ""
+        for x in range(x0, x1 + 1):
+            b = g.get(x, y, z)
+            if b is None:
+                row += "."
+            elif b.name in ("repeater", "comparator"):
+                # facing = сторона входа -> стрелка = направление потока
+                f = {"north": "south", "south": "north", "east": "west", "west": "east"}[b.props["facing"]]
+                row += ("r" if b.name == "repeater" else "c") if False else arrow[f] if b.name == "repeater" else {"east": "}", "west": "{", "north": "A", "south": "V"}[f]
+            elif b.name == "redstone_wall_torch":
+                row += {"east": "e", "west": "w", "north": "n", "south": "s"}[b.props["facing"]]
+            elif b.name in sym:
+                row += sym[b.name]
+            else:
+                row += "#"
+        lines.append(f"{z:3d} " + row)
+    return "\n".join(lines)
