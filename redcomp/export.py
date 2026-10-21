@@ -182,7 +182,16 @@ def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=
         lines.append(f"place template {ns}:{fn} ~{dx} ~{dy} ~{dz}")
         upd.append(f"clone ~{dx} ~{dy} ~{dz} ~{dx+sx-1} ~{dy+sy-1} ~{dz+sz-1} ~{dx} ~{dy} ~{dz} replace force")
     lines += ["# второй проход: обновления соседей, чтобы факелы/повторители/компараторы начали работать"] + upd
-    lines += [f"schedule function {ns}:refresh 400t"]
+    # маркер-«якорь» запоминает точку постройки; отложенные функции работают относительно него
+    lines += [f"kill @e[type=marker,tag={ns}_origin]", f'summon marker ~ ~ ~ {{Tags:["{ns}_origin"]}}',
+              f"schedule function {ns}:later1 400t"]
+    fdir = os.path.join(root, "data", ns, "function")
+    with open(os.path.join(fdir, "later1.mcfunction"), "w") as f:
+        f.write(f"execute at @e[type=marker,tag={ns}_origin,limit=1] run function {ns}:refresh\n"
+                f"schedule function {ns}:later2 400t\n")
+    with open(os.path.join(fdir, "later2.mcfunction"), "w") as f:
+        f.write(f"execute at @e[type=marker,tag={ns}_origin,limit=1] run function {ns}:refresh\n"
+                f"execute at @e[type=marker,tag={ns}_origin,limit=1] run function {ns}:clear_display\n")
     with open(os.path.join(root, "data", ns, "function", "build.mcfunction"), "w") as f:
         f.write("\n".join(lines) + "\n")
     # refresh: ещё один пасс обновлений (факелы, «выгоревшие» из-за стартовых переходных процессов, перезажигаются)

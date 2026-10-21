@@ -44,16 +44,18 @@ def imm_model(v):
 
 
 def pc_spec(nb=9):
-    ins = [f"pc{i}" for i in range(nb)] + [f"a{i}" for i in range(nb)] + ["take"]
+    """следующий PC: переход (take) -> a; иначе pc+1; rst=1 -> 0 (все термы гасятся)"""
+    ins = [f"pc{i}" for i in range(nb)] + [f"a{i}" for i in range(nb)] + ["take", "rst"]
     outs = {}
+    R0 = ("rst", 0)
     for k in range(nb):
-        terms = [T((f"a{k}", 1), ("take", 1))]
+        terms = [T((f"a{k}", 1), ("take", 1), R0)]
         if k == 0:
-            terms.append(T(("pc0", 0), ("take", 0)))
+            terms.append(T(("pc0", 0), ("take", 0), R0))
         else:
             for j in range(k):
-                terms.append(T((f"pc{k}", 1), (f"pc{j}", 0), ("take", 0)))
-            terms.append(T((f"pc{k}", 0), *[(f"pc{j}", 1) for j in range(k)], ("take", 0)))
+                terms.append(T((f"pc{k}", 1), (f"pc{j}", 0), ("take", 0), R0))
+            terms.append(T((f"pc{k}", 0), *[(f"pc{j}", 1) for j in range(k)], ("take", 0), R0))
         outs[f"n{k}"] = terms
     return ins, outs
 
@@ -62,6 +64,8 @@ def pc_model(v, nb=9):
     pc = sum(v[f"pc{i}"] << i for i in range(nb))
     a = sum(v[f"a{i}"] << i for i in range(nb))
     nxt = a if v["take"] else (pc + 1) % (1 << nb)
+    if v.get("rst"):
+        nxt = 0
     return {f"n{k}": (nxt >> k) & 1 for k in range(nb)}
 
 

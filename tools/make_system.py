@@ -53,4 +53,9 @@ pickle.dump({"plan": plan_, "ports": core.ports, "nets": core.nets, "mod_bbox": 
             open(os.path.join(a.out, a.name + "_meta.pkl"), "wb"))
 pickle.dump({p: (b.name, dict(b.props)) for p, b in core.g.b.items()}, open(os.path.join(a.out, a.name + "_grid.pkl"), "wb"))
 tiles = write_datapack(core.g, a.out, name=a.name, tile=96)
+# функция очистки дисплея (запускается автоматически после запуска и вручную: /function <name>:clear_display)
+bx0, bz0, bx1, bz1 = core.mod_bbox["pixels"]
+fdir = os.path.join(a.out, a.name, "data", a.name, "function")
+with open(os.path.join(fdir, "clear_display.mcfunction"), "w") as f:
+    f.write(f"fill ~{bx0} ~0 ~{bz0} ~{bx1} ~0 ~{bz1} minecraft:copper_bulb[lit=false,powered=false] replace minecraft:copper_bulb\n")
 print("датапак:", tiles, "плиток в", os.path.join(a.out, a.name), flush=True)

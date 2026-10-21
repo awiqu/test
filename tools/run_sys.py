@@ -5,8 +5,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from redcomp.sim import Server
 from redcomp.isa import Cpu
 
-dp = sys.argv[1]
-name = sys.argv[2] if len(sys.argv) > 2 else "rc8"
+dp = os.environ.get("RC8_DP") or (sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "/tmp/mc/dp")
+name = os.environ.get("RC8_NAME", "rc8")
 meta = pickle.load(open(os.path.join(dp, name + "_meta.pkl"), "rb"))
 plan, ports, words = meta["plan"], meta["ports"], meta["words"]
 S = Server()

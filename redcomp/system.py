@@ -331,8 +331,9 @@ def system_nets():
     N("fS", ("control", "fS"), [("flags", "fS")])
     N("fSHR", ("control", "fSHR"), [("flags", "fSHR")])
     # --- секвенсор и импульсы
-    for n in ("p1", "p2", "p3", "rst"):
+    for n in ("p1", "p2", "p3"):
         N(n, ("seq", n), [("pulse", n)])
+    N("rst", ("seq", "rst"), [("pulse", "rst"), ("pc", "rst")])
     N("pNPC", ("pulse", "pNPC"), [("NPC", "bus")])
     N("pRES", ("pulse", "pRES"), [("RES", "bus")])
     N("pFLG", ("pulse", "pFLG"), [("FLG", "bus")])
