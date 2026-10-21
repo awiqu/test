@@ -160,7 +160,7 @@ def tiles(g: Grid, tile=96):
     return out
 
 
-def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0)):
+def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=(0, 0, 0)):
     """датапак: data/<name>/structure/*.nbt + function/build.mcfunction (размещает плитки относительно ~ ~ ~
     и затем /clone на месте — чтобы сработали обновления блоков). Возвращает число плиток."""
     ns = name
@@ -170,8 +170,8 @@ def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0)):
     with open(os.path.join(root, "pack.mcmeta"), "w") as f:
         json.dump({"pack": {"description": f"{name}: redstone computer",
                             "min_format": [107, 1], "max_format": [107, 1]}}, f)
-    (gx0, gy0, gz0), _ = bounds(g)
-    lines = [f"# {name}: построить компьютер; ~ ~ ~ — точка начала (юго-запад-низ площадки)"]
+    gx0, gy0, gz0 = anchor          # координата сетки, которая попадёт в ~ ~ ~
+    lines = [f"# {name}: построить компьютер; координата сетки {anchor} попадает в ~ ~ ~"]
     tl = tiles(g, tile)
     upd = []
     for (ti, tj), ((ox, oy, oz), (sx, sy, sz), bl) in sorted(tl.items()):
@@ -182,6 +182,10 @@ def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0)):
         lines.append(f"place template {ns}:{fn} ~{dx} ~{dy} ~{dz}")
         upd.append(f"clone ~{dx} ~{dy} ~{dz} ~{dx+sx-1} ~{dy+sy-1} ~{dz+sz-1} ~{dx} ~{dy} ~{dz} replace force")
     lines += ["# второй проход: обновления соседей, чтобы факелы/повторители/компараторы начали работать"] + upd
+    lines += [f"schedule function {ns}:refresh 400t"]
     with open(os.path.join(root, "data", ns, "function", "build.mcfunction"), "w") as f:
         f.write("\n".join(lines) + "\n")
+    # refresh: ещё один пасс обновлений (факелы, «выгоревшие» из-за стартовых переходных процессов, перезажигаются)
+    with open(os.path.join(root, "data", ns, "function", "refresh.mcfunction"), "w") as f:
+        f.write("\n".join(upd) + "\n")
     return len(tl)

@@ -71,6 +71,8 @@ def build_core(core: Core, verbose=True):
         core.ext(n, 140 + 8 * i, 0, "S")
     for i in range(4):
         core.ext(f"lev{i}", 180 + 8 * i, 0, "S")
+    core.ext("one", 212, 0, "S")          # постоянная единица (вход na_next старшего разряда)
+    g.rblock(212, 0, -1)
 
     # ---------- строка ПЛМ управления
     OZ = 40
@@ -203,6 +205,7 @@ def build_core(core: Core, verbose=True):
         N(f"cout{k}", (f"alu{k}", "cout"), [(f"alu{k+1}", "c")])
         N(f"na{k+1}", (f"alu{k+1}", "na"), [(f"alu{k}", "na_next")])
     N("cout7", ("alu7", "cout"), [("flags", "cout7")])
+    N("one", ("ext", "one"), [("alu7", "na_next")])
     N("cin", ("jump", "cin"), [("alu0", "c")])
     # флаги
     N("Znew", ("flags", "Znew"), [("FLG", "d0")])

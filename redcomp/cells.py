@@ -69,7 +69,7 @@ def latch_row(g: Grid, ox, oz, n, pitch=4, mat="stone"):
         g.solid(x, 1, oz, mat)
         g.dust(x, 2, oz)
     # рампа подачи шины слева: (ox-6,0)->(ox-5,1)->(ox-4,2)  [порт (ox-6,0,oz)]
-    g.dust(ox - 6, 0, oz)
+    g.repeater(ox - 6, 0, oz, "east")                      # регенератор на входе: слабый сигнал не дойдёт по рампе
     g.solid(ox - 5, 0, oz, mat); g.dust(ox - 5, 1, oz)
     g.solid(ox - 4, 1, oz, mat); g.dust(ox - 4, 2, oz)
     for x in range(ox - 3, x_first):

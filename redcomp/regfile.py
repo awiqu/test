@@ -29,7 +29,7 @@ def regfile(g: Grid, ox, oz, nreg=8, nbit=8, px=10, pz=8, mat="stone"):
         for x, name in ((wr_x, "wr"), (sel_x, "sel")):
             # порт и рампа
             g.dust(x, 0, oz)
-            g.dust(x, 0, oz + 1)
+            g.repeater(x, 0, oz + 1, "south")              # регенератор перед рампой
             g.solid(x, 0, oz + 2, mat); g.dust(x, 1, oz + 2)
             # линия y=2
             n = 0

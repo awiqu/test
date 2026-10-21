@@ -115,6 +115,12 @@ class GlobalRouter:
         L.append(str(len(pb))); L += pb
         po = [f"{i} {j} {idx[nm]}" for (i, j), nm in R.pin_nodes.items() if nm in idx]
         L.append(str(len(po))); L += po
+        nr = []
+        for (i, j), nm in R.pin_nodes.items():
+            x, z = R.xz(i, j)
+            if (x, self.y0 + 1, z) in self.g.b or (x, self.y0 + 2, z) in self.g.b:
+                nr.append(f"{i} {j}")           # над пином занято: рампа на нём невозможна
+        L.append(str(len(nr))); L += nr
         L.append(str(len(names)))
         for n in names:
             pts = terms[n]

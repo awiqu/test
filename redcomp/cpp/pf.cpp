@@ -7,7 +7,7 @@
 using namespace std;
 
 int ni, nj, N, NR;
-vector<char> blk, hardStreet;
+vector<char> blk, hardStreet, noRamp;
 vector<int> pinown;
 vector<vector<int>> users;
 vector<float> hist;
@@ -81,7 +81,7 @@ bool astar(const vector<int> &sources, const vector<char> &isT, const vector<arr
                 int li, lj, hi, hj;
                 if (l == 0) { li = i; lj = j; hi = i2; hj = j2; } else { li = i2; lj = j2; hi = i; hj = j; }
                 if (!nodeOK(li, lj) || !nodeOK(hi, hj)) continue;
-                if (hardNode0(li, lj)) continue;
+                if (hardNode0(li, lj) || noRamp[lj * ni + li] || pinown[lj * ni + li] >= 0) continue;   // на пинах только плоский подход: у пина будет регенератор
                 if (curFlat[key] || curD2[lj * ni + li]) continue;
                 int n2 = nodeId(i2, j2, 1 - l);
                 float ng = cur.g + cst(rs(lo_i, lo_j, dir, 0)) + cst(rs(lo_i, lo_j, dir, 1)) + cst(rn(li, lj, 1)) + cst(rn(hi, hj, 1)) + cst(rn(li, lj, 0)) + 2.0f;
@@ -110,6 +110,8 @@ int main() {
         if (lo_i < 0 || lo_j < 0 || lo_i >= ni || lo_j >= nj) continue;
         hardStreet[((lo_j * ni + lo_i) * 2 + dir) * 2 + 0] = hardStreet[((lo_j * ni + lo_i) * 2 + dir) * 2 + 1] = 1; }
     int npo; scanf("%d", &npo); for (int k = 0; k < npo; k++) { int i, j, o; scanf("%d %d %d", &i, &j, &o); pinown[j * ni + i] = o; }
+    noRamp.assign(N, 0);
+    int nnr; scanf("%d", &nnr); for (int k = 0; k < nnr; k++) { int i, j; scanf("%d %d", &i, &j); noRamp[j * ni + i] = 1; }
     int nn; scanf("%d", &nn);
     vector<vector<array<int,2>>> terms(nn);
     for (int k = 0; k < nn; k++) { int nt; scanf("%d", &nt); terms[k].resize(nt); for (auto &t : terms[k]) scanf("%d %d", &t[0], &t[1]); }
