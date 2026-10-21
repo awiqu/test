@@ -54,3 +54,36 @@ def regbit(g: Grid, xd, zw, wr_x, sel_x, mat="stone"):
         g.dust(x, 0, zd + 2)
     g.dust(xd, 0, zd + 3)                        # отвод к R
     return dict(W=zw, R=zw + 6)
+
+
+def latch_row(g: Grid, ox, oz, n, pitch=4, mat="stone"):
+    """Ряд из n защёлок (D-повторитель + замок). Шина записи (активный высокий импульс) идёт на y=2 вдоль X на z=oz.
+    Бит i: x = ox + pitch*i. Данные подаются сверху на (x,0,oz-1); выход Q — снизу (x,0,oz+2).
+    Шина записи подаётся в порт (ox-4, 0, oz) слева (пыль на y=0, рампа вверх).
+    Возвращает dict портов."""
+    x_first = ox - 2
+    x_last = ox + pitch * (n - 1) + 1
+    # шина: стена y=1 + пыль y=2
+    for x in range(x_first, x_last + 1):
+        g.solid(x, 1, oz, mat)
+        g.dust(x, 2, oz)
+    # рампа подачи шины слева: (ox-6,0)->(ox-5,1)->(ox-4,2)  [порт (ox-6,0,oz)]
+    g.dust(ox - 6, 0, oz)
+    g.solid(ox - 5, 0, oz, mat); g.dust(ox - 5, 1, oz)
+    g.solid(ox - 4, 1, oz, mat); g.dust(ox - 4, 2, oz)
+    for x in range(ox - 3, x_first):
+        g.solid(x, 1, oz, mat); g.dust(x, 2, oz)
+    ports = {"bus": (ox - 6, 0, oz), "d": [], "q": []}
+    for i in range(1, n, 2):                               # регенерация шины каждые 2 бита
+        g.repeater(ox + pitch * i + 1, 2, oz, "east")
+    for i in range(n):
+        x = ox + pitch * i
+        g.dust(x, 0, oz)                                  # данные (под шиной)
+        g.repeater(x, 0, oz + 1, "south")                 # D
+        g.repeater(x - 1, 0, oz + 1, "east")              # замок L
+        g.wall_torch(x - 2, 1, oz + 1, "south")           # переход: факел на южной грани стены (x-2,1,oz)
+        g.dust(x - 2, 0, oz + 1)                          # ~шина под факелом -> вход L
+        g.dust(x, 0, oz + 2)                              # Q
+        ports["d"].append((x, 0, oz - 1))
+        ports["q"].append((x, 0, oz + 2))
+    return ports

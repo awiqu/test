@@ -76,10 +76,12 @@ def _encode(n, mn, a, labels):
     if mn == "HLT":  need(0); return SYS_HLT
     if mn == "LDI":
         need(2); return (1 << 12) | (_reg(a[0], n) << 9) | _num(a[1], labels, n, -128, 255, "imm8") & 0xFF
-    if mn in ("ADD", "SUB", "AND", "OR", "XOR"):
+    if mn in ("ADD", "SUB", "AND", "OR", "XOR", "ADC"):
         need(3); return (OPCODES[mn] << 12) | (_reg(a[0], n) << 9) | (_reg(a[1], n) << 6) | (_reg(a[2], n) << 3)
-    if mn in ("SHL", "SHR"):
+    if mn == "SHR":
         need(2); return (OPCODES[mn] << 12) | (_reg(a[0], n) << 9) | (_reg(a[1], n) << 6)
+    if mn == "SHL":      # псевдокоманда: сдвиг влево = ADD rd, ra, ra
+        need(2); return _encode(n, "ADD", [a[0], a[1], a[1]], labels)
     if mn == "ADDI":
         need(3); return (9 << 12) | (_reg(a[0], n) << 9) | (_reg(a[1], n) << 6) | (_num(a[2], labels, n, -32, 31, "imm6") & 0x3F)
     if mn == "CMP":
@@ -112,8 +114,8 @@ def disasm(w):
     n = names[op]
     if n == "SYS": return "HLT" if (w & 7) == 1 else "NOP"
     if n == "LDI": return f"LDI R{rd}, {w & 0xFF}"
-    if n in ("ADD", "SUB", "AND", "OR", "XOR"): return f"{n} R{rd}, R{ra}, R{rb}"
-    if n in ("SHL", "SHR"): return f"{n} R{rd}, R{ra}"
+    if n in ("ADD", "SUB", "AND", "OR", "XOR", "ADC"): return f"{n} R{rd}, R{ra}, R{rb}"
+    if n == "SHR": return f"{n} R{rd}, R{ra}"
     if n == "ADDI": return f"ADDI R{rd}, R{ra}, {sext(w & 0x3F, 6)}"
     if n == "CMP": return f"CMP R{ra}, R{rb}"
     if n == "JMP": return f"JMP {w & 0x1FF}"

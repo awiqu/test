@@ -7,11 +7,15 @@ from .grid import Grid
 
 MAXRUN = 14   # макс. длина пыли без повторителя
 
-def ramp_up_x(g, x, z, mat="stone"):
-    """рампа вдоль +X: пыль (x,0,z) -> (x+1,1,z) -> (x+2,2,z). Занимает x..x+2. Возвращает x+2."""
+def ramp_up_x(g, x, z, mat="stone", regen=False):
+    """рампа вдоль +X: пыль (x,0,z) -> (x+1,1,z) -> (x+2,2,z). Занимает x..x+2. Возвращает x+2.
+    regen=True: первая клетка — повторитель (восстанавливает уровень 15)."""
     g.solid(x + 1, 0, z, mat); g.dust(x + 1, 1, z)
     g.solid(x + 2, 1, z, mat); g.dust(x + 2, 2, z)
-    g.dust(x, 0, z)
+    if regen:
+        g.repeater(x, 0, z, "east")
+    else:
+        g.dust(x, 0, z)
     return x + 2
 
 def ramp_up_z(g, x, z, mat="stone"):
@@ -98,6 +102,8 @@ def plane_b(g, ox, oz, ncols, nrows, sites, mat="stone"):
             n += 1
             if n >= 11 and (z - oz) % 2 == 0 and z != z_end and z != oz:
                 g.repeater(x, 0, z, "south"); n = 0
+        if ncols >= 2:
+            g.repeater(x, 0, z_end - 2, "south")          # регенерация перед портом
     return z_end, xs
 
 def insert_repeaters_row(g, y, z, x0, x1, step=MAXRUN):
@@ -181,7 +187,7 @@ class PLA:
         x_ramp = x_endA
         for z in zs:
             # пыль строки уже на y=0 до x_endA; рампа продолжается с x_endA
-            ramp_up_x(g, x_endA, z, mat)
+            ramp_up_x(g, x_endA, z, mat, regen=True)
         xB = x_endA + 3            # начало плоскости B (первая строка B: x= xB)
         # столбцы B лежат на z=zs[r]; B-стена начинается с x_lo = xB-1; рампа кончается на x_endA+2 (y=2) -> смыкается с x_lo?
         # plane_b ставит стену/пыль от x_lo=ox_b-1.. ; задаём ox_b = x_endA+3 -> x_lo = x_endA+2 (последняя клетка рампы)

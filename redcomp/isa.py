@@ -2,15 +2,15 @@
 
 Формат слова (биты 15..0):
   [15:12] код операции
-  R-тип : [11:9] rd  [8:6] ra  [5:3] rb  [2:0] 0
+  R-тип : [11:9] rd  [8:6] ra  [5:3] rb  [2:0] 0   (SHL rd,ra = ADD rd,ra,ra)
   I-тип : LDI  [11:9] rd [7:0] imm8 ;  ADDI [11:9] rd [8:6] ra [5:0] imm6 (знаковое)
   J-тип : JMP [8:0] адрес ;  Jcc [11:9] условие [8:0] адрес
 """
 from dataclasses import dataclass, field
 
 OPCODES = {
-    "SYS": 0, "LDI": 1, "ADD": 2, "SUB": 3, "AND": 4, "OR": 5, "XOR": 6, "SHL": 7,
-    "SHR": 8, "ADDI": 9, "CMP": 10, "JMP": 11, "JCC": 12, "IN": 13, "OUT": 14, "PLOT": 15,
+    "SYS": 0, "LDI": 1, "ADD": 2, "SUB": 3, "AND": 4, "OR": 5, "XOR": 6, "SHR": 7,
+    "ADC": 8, "ADDI": 9, "CMP": 10, "JMP": 11, "JCC": 12, "IN": 13, "OUT": 14, "PLOT": 15,
 }
 SYS_NOP, SYS_HLT = 0, 1
 COND = {"JZ": 0, "JNZ": 1, "JC": 2, "JNC": 3}
@@ -39,12 +39,13 @@ class Cpu:
     def alu(self, op, a, b):
         if op in ("ADD", "ADDI", "LDI"):
             r = a + b; c = r >> 8
+        elif op == "ADC":
+            r = a + b + self.c; c = r >> 8
         elif op in ("SUB", "CMP"):
             r = a + ((~b) & 0xFF) + 1; c = r >> 8       # C = нет займа (a>=b)
         elif op == "AND": r = a & b; c = 0
         elif op == "OR":  r = a | b; c = 0
         elif op == "XOR": r = a ^ b; c = 0
-        elif op == "SHL": r = a << 1; c = r >> 8
         elif op == "SHR": r = a >> 1; c = a & 1
         else: raise ValueError(op)
         return r & 0xFF, c
@@ -64,9 +65,9 @@ class Cpu:
                 self.halted = True
         elif name == "LDI":
             wr = w & 0xFF
-        elif name in ("ADD", "SUB", "AND", "OR", "XOR"):
+        elif name in ("ADD", "SUB", "AND", "OR", "XOR", "ADC"):
             wr, c = self.alu(name, R[ra], R[rb]); self.c = c; self.z = int(wr == 0)
-        elif name in ("SHL", "SHR"):
+        elif name == "SHR":
             wr, c = self.alu(name, R[ra], 0); self.c = c; self.z = int(wr == 0)
         elif name == "ADDI":
             wr, c = self.alu("ADDI", R[ra], sext(w & 0x3F, 6) & 0xFF); self.c = c; self.z = int(wr == 0)
