@@ -1,0 +1,77 @@
+# rc8: построить компьютер; координата сетки (0, 0, 0) попадает в ~ ~ ~
+place template rc8:full ~4 ~0 ~-2
+# второй проход: обновления соседей, чтобы факелы/повторители/компараторы начали работать
+clone ~4 ~0 ~478 ~99 ~2 ~573 ~4 ~0 ~478 replace force
+clone ~4 ~0 ~574 ~99 ~2 ~669 ~4 ~0 ~574 replace force
+clone ~4 ~0 ~670 ~99 ~2 ~765 ~4 ~0 ~670 replace force
+clone ~4 ~0 ~766 ~99 ~2 ~861 ~4 ~0 ~766 replace force
+clone ~4 ~0 ~862 ~99 ~2 ~874 ~4 ~0 ~862 replace force
+clone ~100 ~0 ~190 ~195 ~2 ~285 ~100 ~0 ~190 replace force
+clone ~100 ~0 ~286 ~192 ~2 ~381 ~100 ~0 ~286 replace force
+clone ~100 ~0 ~382 ~195 ~2 ~477 ~100 ~0 ~382 replace force
+clone ~100 ~0 ~478 ~195 ~2 ~573 ~100 ~0 ~478 replace force
+clone ~100 ~0 ~574 ~195 ~2 ~669 ~100 ~0 ~574 replace force
+clone ~100 ~0 ~670 ~195 ~2 ~765 ~100 ~0 ~670 replace force
+clone ~100 ~0 ~766 ~195 ~2 ~861 ~100 ~0 ~766 replace force
+clone ~100 ~0 ~862 ~195 ~2 ~874 ~100 ~0 ~862 replace force
+clone ~196 ~0 ~190 ~291 ~2 ~285 ~196 ~0 ~190 replace force
+clone ~196 ~0 ~286 ~291 ~2 ~381 ~196 ~0 ~286 replace force
+clone ~196 ~0 ~382 ~291 ~2 ~460 ~196 ~0 ~382 replace force
+clone ~196 ~0 ~478 ~291 ~2 ~573 ~196 ~0 ~478 replace force
+clone ~196 ~0 ~574 ~291 ~2 ~669 ~196 ~0 ~574 replace force
+clone ~196 ~0 ~670 ~291 ~2 ~765 ~196 ~0 ~670 replace force
+clone ~196 ~0 ~766 ~291 ~2 ~861 ~196 ~0 ~766 replace force
+clone ~196 ~0 ~862 ~291 ~2 ~874 ~196 ~0 ~862 replace force
+clone ~292 ~0 ~190 ~387 ~2 ~285 ~292 ~0 ~190 replace force
+clone ~292 ~0 ~286 ~387 ~2 ~381 ~292 ~0 ~286 replace force
+clone ~292 ~0 ~382 ~387 ~2 ~477 ~292 ~0 ~382 replace force
+clone ~292 ~0 ~478 ~387 ~2 ~573 ~292 ~0 ~478 replace force
+clone ~292 ~0 ~574 ~387 ~2 ~669 ~292 ~0 ~574 replace force
+clone ~292 ~0 ~670 ~387 ~2 ~765 ~292 ~0 ~670 replace force
+clone ~292 ~0 ~766 ~387 ~2 ~861 ~292 ~0 ~766 replace force
+clone ~292 ~0 ~862 ~316 ~2 ~874 ~292 ~0 ~862 replace force
+clone ~388 ~0 ~190 ~483 ~2 ~285 ~388 ~0 ~190 replace force
+clone ~388 ~0 ~286 ~483 ~2 ~381 ~388 ~0 ~286 replace force
+clone ~388 ~0 ~382 ~483 ~2 ~477 ~388 ~0 ~382 replace force
+clone ~388 ~0 ~478 ~483 ~2 ~573 ~388 ~0 ~478 replace force
+clone ~388 ~0 ~574 ~483 ~2 ~669 ~388 ~0 ~574 replace force
+clone ~388 ~0 ~670 ~483 ~2 ~765 ~388 ~0 ~670 replace force
+clone ~388 ~0 ~766 ~483 ~2 ~861 ~388 ~0 ~766 replace force
+clone ~388 ~0 ~862 ~483 ~2 ~866 ~388 ~0 ~862 replace force
+clone ~484 ~0 ~-2 ~579 ~2 ~93 ~484 ~0 ~-2 replace force
+clone ~484 ~0 ~94 ~579 ~2 ~189 ~484 ~0 ~94 replace force
+clone ~484 ~0 ~190 ~579 ~2 ~285 ~484 ~0 ~190 replace force
+clone ~484 ~0 ~286 ~579 ~2 ~381 ~484 ~0 ~286 replace force
+clone ~484 ~0 ~382 ~579 ~2 ~477 ~484 ~0 ~382 replace force
+clone ~484 ~0 ~478 ~579 ~2 ~573 ~484 ~0 ~478 replace force
+clone ~484 ~0 ~574 ~579 ~2 ~669 ~484 ~0 ~574 replace force
+clone ~484 ~0 ~670 ~579 ~2 ~765 ~484 ~0 ~670 replace force
+clone ~484 ~0 ~766 ~579 ~2 ~861 ~484 ~0 ~766 replace force
+clone ~484 ~0 ~862 ~552 ~2 ~866 ~484 ~0 ~862 replace force
+clone ~580 ~0 ~-2 ~675 ~2 ~93 ~580 ~0 ~-2 replace force
+clone ~580 ~0 ~94 ~675 ~2 ~189 ~580 ~0 ~94 replace force
+clone ~580 ~0 ~190 ~675 ~2 ~285 ~580 ~0 ~190 replace force
+clone ~580 ~0 ~286 ~675 ~2 ~381 ~580 ~0 ~286 replace force
+clone ~580 ~0 ~382 ~675 ~2 ~477 ~580 ~0 ~382 replace force
+clone ~580 ~0 ~478 ~675 ~2 ~573 ~580 ~0 ~478 replace force
+clone ~580 ~0 ~574 ~675 ~2 ~669 ~580 ~0 ~574 replace force
+clone ~580 ~0 ~670 ~675 ~2 ~765 ~580 ~0 ~670 replace force
+clone ~580 ~0 ~766 ~588 ~2 ~804 ~580 ~0 ~766 replace force
+clone ~676 ~0 ~-2 ~740 ~2 ~93 ~676 ~0 ~-2 replace force
+clone ~676 ~0 ~94 ~771 ~2 ~189 ~676 ~0 ~94 replace force
+clone ~676 ~0 ~190 ~771 ~2 ~285 ~676 ~0 ~190 replace force
+clone ~676 ~0 ~286 ~771 ~2 ~381 ~676 ~0 ~286 replace force
+clone ~676 ~0 ~382 ~771 ~2 ~477 ~676 ~0 ~382 replace force
+clone ~676 ~0 ~478 ~771 ~2 ~573 ~676 ~0 ~478 replace force
+clone ~676 ~0 ~574 ~734 ~2 ~669 ~676 ~0 ~574 replace force
+clone ~676 ~0 ~670 ~726 ~2 ~672 ~676 ~0 ~670 replace force
+clone ~772 ~0 ~94 ~808 ~2 ~189 ~772 ~0 ~94 replace force
+clone ~772 ~0 ~190 ~867 ~2 ~285 ~772 ~0 ~190 replace force
+clone ~772 ~0 ~286 ~867 ~2 ~381 ~772 ~0 ~286 replace force
+clone ~772 ~0 ~382 ~838 ~2 ~477 ~772 ~0 ~382 replace force
+clone ~772 ~0 ~478 ~826 ~2 ~518 ~772 ~0 ~478 replace force
+clone ~868 ~0 ~190 ~920 ~2 ~285 ~868 ~0 ~190 replace force
+clone ~868 ~0 ~286 ~920 ~2 ~350 ~868 ~0 ~286 replace force
+kill @e[type=marker,tag=rc8_origin]
+summon marker ~ ~ ~ {Tags:["rc8_origin"]}
+schedule function rc8:later1 400t

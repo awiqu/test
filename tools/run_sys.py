@@ -114,7 +114,7 @@ if __name__ == "__main__":
         lever("slow", True); S.step(300); print("рычаг SLOW включён")
     print("START"); press("bStart")
     waited = 0
-    while waited < 60000:
+    while waited < 250000:
         S.step(1000); waited += 1000
         print(f"  t={waited} run={run_lamp()}", flush=True)
         if not run_lamp() and waited > 3000:

@@ -1,4 +1,6 @@
-*.pyc
+dist/work/rc8_grid.pkl
+dist/work/rc8/
+dist/work/rc8_rom/
 __pycache__/
+*.pyc
 build/
-dist/tmp/
