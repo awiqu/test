@@ -9,7 +9,8 @@ meta = pickle.load(open(os.path.join(d, name + "_meta.pkl"), "rb"))
 g = Grid()
 for p, (n, props) in data.items():
     g.b[p] = Block(n, props)
-write_datapack(g, d, name=name, tile=96)
+rx, rz, _ = meta["ports"][("panel", "bRst")]
+write_datapack(g, d, name=name, tile=96, reset_btn=(rx, 0, rz + 2))
 bx0, bz0, bx1, bz1 = meta["mod_bbox"]["pixels"]
 fdir = os.path.join(d, name, "data", name, "function")
 with open(os.path.join(fdir, "clear_display.mcfunction"), "w") as f:

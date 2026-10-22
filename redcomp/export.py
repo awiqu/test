@@ -160,7 +160,7 @@ def tiles(g: Grid, tile=96):
     return out
 
 
-def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=(0, 0, 0)):
+def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=(0, 0, 0), reset_btn=None):
     """датапак: data/<name>/structure/*.nbt + function/build.mcfunction (размещает плитки относительно ~ ~ ~
     и затем /clone на месте — чтобы сработали обновления блоков). Возвращает число плиток."""
     import shutil
@@ -196,6 +196,19 @@ def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=
     with open(os.path.join(fdir, "later2.mcfunction"), "w") as f:
         f.write(f"execute at @e[type=marker,tag={ns}_origin,limit=1] run function {ns}:refresh\n"
                 f"execute at @e[type=marker,tag={ns}_origin,limit=1] run function {ns}:clear_display\n")
+        if reset_btn is not None:
+            f.write(f"schedule function {ns}:rst_press 200t\n")
+    if reset_btn is not None:
+        # автосброс после постройки: дважды «нажимаем» RESET (триггеры секвенсора при включении в случайном состоянии)
+        bx, by, bz = reset_btn
+        at = f"execute at @e[type=marker,tag={ns}_origin,limit=1] run"
+        btn = lambda v: f"setblock ~{bx - gx0 + base[0]} ~{by - gy0 + base[1]} ~{bz - gz0 + base[2]} minecraft:stone_button[face=floor,facing=north,powered={v}]"
+        for name_, nxt, act in (("rst_press", "rst_release", "true"), ("rst_release", "rst_press2", "false"),
+                                ("rst_press2", "rst_release2", "true"), ("rst_release2", None, "false")):
+            with open(os.path.join(fdir, name_ + ".mcfunction"), "w") as f:
+                f.write(f"{at} {btn(act)}\n")
+                if nxt:
+                    f.write(f"schedule function {ns}:{nxt} {24 if act == 'true' else 3600}t\n")
     with open(os.path.join(root, "data", ns, "function", "build.mcfunction"), "w") as f:
         f.write("\n".join(lines) + "\n")
     # refresh: ещё один пасс обновлений (факелы, «выгоревшие» из-за стартовых переходных процессов, перезажигаются)

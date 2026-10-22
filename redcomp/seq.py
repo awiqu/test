@@ -5,7 +5,7 @@ fb И RUN снова запускает генератор. Кнопки впр�
 """
 from .grid import Grid
 from .lattice import Netlist
-from .modules import lattice_module, delay_chain, cached
+from .modules import lattice_module, delay_chain, cached, distribute_delay
 
 INS = ["bStart", "bStop", "bStep", "bRst", "hlt", "fb", "qd", "runD", "p3"]
 OUTS = ["q", "run", "rstl"]
@@ -52,7 +52,11 @@ def seqctl_grid():
     return cached(f"seqctl_{CTL_NI}x{CTL_NJ}", build)
 
 
-def build_seq(core, ox, oz, nw=4, a1=6, a2=6, a3=6, a4=10, width=22, mod="seq"):
+CAP = dict(dw=16, dr=1, d1=50, d2=20, d3=20, d4=50)          # ёмкость цепочек (повторителей)
+TICKS = dict(dw=100, d1=700, d2=200, d3=200, d4=600)         # задержки по умолчанию (игровые тики)
+
+
+def build_seq(core, ox, oz, cap=None, ticks=None, width=22, mod="seq"):
     """Разместить секвенсор в Core: модуль логики + цепочки задержек; зарегистрировать порты и цепи.
     Внешние входы (порты (mod,'bStart'..'hlt')), выходы ('p1','p2','p3','rst','run') — пины на модуле логики/цепочках.
     Возвращает dict с геометрией и временами (игровые тики)."""
@@ -71,9 +75,17 @@ def build_seq(core, ox, oz, nw=4, a1=6, a2=6, a3=6, a4=10, width=22, mod="seq"):
     cx = ox + 2 * CTL_NI + 16
     z = oz
     chains = {}
-    for name, n in (("dw", nw), ("dr", 1), ("d1", a1), ("d2", a2), ("d3", a3), ("d4", a4)):
+    cap = {**CAP, **(cap or {})}
+    tk = {**TICKS, **(ticks or {})}
+    for name in ("dw", "dr", "d1", "d2", "d3", "d4"):
+        n = cap[name]
         sub = Grid()
         c = delay_chain(sub, 0, 0, n, 4, width)
+        if name != "dr":
+            for pos, d in zip(c["reps"], distribute_delay(n, tk[name])):
+                sub.b[pos].props["delay"] = d
+            c["ticks"] = 2 * sum(sub.b[pos].props["delay"] for pos in c["reps"])
+        c["abs_reps"] = [(pp[0] + cx, pp[1], pp[2] + z) for pp in c["reps"]]
         for p, b in sub.b.items():
             g.b[(p[0] + cx, p[1], p[2] + z)] = b
         (xi, _, zi), (xo, _, zo) = c["in"], c["out"]

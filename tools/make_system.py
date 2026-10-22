@@ -15,16 +15,12 @@ ap.add_argument("--iters", type=int, default=30000)
 ap.add_argument("--route-iters", type=int, default=150)
 ap.add_argument("--out", default="/tmp/mc/dp")
 ap.add_argument("--name", default="rc8")
-ap.add_argument("--nw", type=int, default=20)
-ap.add_argument("--a1", type=int, default=100)
-ap.add_argument("--a2", type=int, default=30)
-ap.add_argument("--a3", type=int, default=30)
-ap.add_argument("--a4", type=int, default=60)
+ap.add_argument("--ticks", default="", help="например dw=100,d1=700,d2=200,d3=200,d4=600 (игровые тики)")
 ap.add_argument("--plan", default=None)
 a = ap.parse_args()
 
 words = assemble(open(a.asm).read())
-seqp = dict(nw=a.nw, a1=a.a1, a2=a.a2, a3=a.a3, a4=a.a4)
+seqp = dict(ticks={k: int(v) for k, v in (kv.split("=") for kv in a.ticks.split(",") if kv)})
 plan = pickle.load(open(a.plan, "rb")) if a.plan else None
 halo = a.halo
 for attempt in range(4):
@@ -49,10 +45,12 @@ print(f"проверка: слабых/недостижимых {len(bad)}, за
 assert not bad and not sh
 os.makedirs(a.out, exist_ok=True)
 pickle.dump({"plan": plan_, "ports": core.ports, "nets": core.nets, "mod_bbox": core.mod_bbox,
-             "timing": getattr(mods["seq"], "timing", None), "words": words},
+             "timing": getattr(mods["seq"], "timing", None), "words": words,
+             "seq_chains": {k: [(x + plan_["seq"][0], y, z + plan_["seq"][1]) for (x, y, z) in v] for k, v in mods["seq"].chain_reps.items()}},
             open(os.path.join(a.out, a.name + "_meta.pkl"), "wb"))
 pickle.dump({p: (b.name, dict(b.props)) for p, b in core.g.b.items()}, open(os.path.join(a.out, a.name + "_grid.pkl"), "wb"))
-tiles = write_datapack(core.g, a.out, name=a.name, tile=96)
+rx, rz, _ = core.ports[("panel", "bRst")]
+tiles = write_datapack(core.g, a.out, name=a.name, tile=96, reset_btn=(rx, 0, rz + 2))
 # функция очистки дисплея (запускается автоматически после запуска и вручную: /function <name>:clear_display)
 bx0, bz0, bx1, bz1 = core.mod_bbox["pixels"]
 fdir = os.path.join(a.out, a.name, "data", a.name, "function")

@@ -9,6 +9,7 @@ def delay_chain(g: Grid, ox, oz, n, delay=4, width=24):
     Вход: пыль в (ox, oz) — принимает сигнал с запада. Выход: пыль в конце цепи.
     Строки идут через 2 клетки по z. Возвращает dict(in=(x,0,z), out=(x,0,z), bbox, in_dir, out_dir, ticks)."""
     row, left = 0, n
+    reps = []
     x_first, x_last = ox + 1, ox + width
     z = oz
     g.dust(ox, 0, oz)
@@ -19,7 +20,7 @@ def delay_chain(g: Grid, ox, oz, n, delay=4, width=24):
         if cur_dir == "east":
             cnt = min(left, x_last - x + 1)
             for k in range(cnt):
-                g.repeater(x + k, 0, z, "east", delay)
+                g.repeater(x + k, 0, z, "east", delay); reps.append((x + k, 0, z))
             xe = x + cnt - 1
             left -= cnt
             if left > 0:
@@ -32,7 +33,7 @@ def delay_chain(g: Grid, ox, oz, n, delay=4, width=24):
         else:
             cnt = min(left, x - x_first + 1)
             for k in range(cnt):
-                g.repeater(x - k, 0, z, "west", delay)
+                g.repeater(x - k, 0, z, "west", delay); reps.append((x - k, 0, z))
             xe = x - cnt + 1
             left -= cnt
             if left > 0:
@@ -45,8 +46,15 @@ def delay_chain(g: Grid, ox, oz, n, delay=4, width=24):
     if out[0] % 2:
         step = 1 if out_dir == "E" else -1
         out = (out[0] + step, 0, out[2]); g.dust(*out)
-    return {"in": (ox, 0, oz), "out": out, "in_dir": "W", "out_dir": out_dir,
+    return {"in": (ox, 0, oz), "out": out, "in_dir": "W", "out_dir": out_dir, "reps": reps,
             "ticks": 2 * delay * n, "bbox": (ox, oz, x_last + 2, z)}
+
+
+def distribute_delay(n, ticks):
+    """задержки (1..4 редстоун-тика) для n повторителей так, чтобы суммарно получилось ticks игровых тиков"""
+    s = max(n, min(4 * n, ticks // 2))
+    base, rem = divmod(s, n)
+    return [base + 1 if i < rem else base for i in range(n)]
 
 
 def lattice_module(nl: Netlist, NI, NJ, ext, src_names, seeds=range(8), iters=30000, flow_w=1.5, verbose=False):

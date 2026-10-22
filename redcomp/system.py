@@ -191,11 +191,11 @@ def mod_panel():
     return m
 
 
-def mod_seq(a1=6, a2=6, a3=6, a4=10, nw=4):
+def mod_seq(cap=None, ticks=None):
     """Секвенсор как жёсткий макрос: внутренние цепи проложены; внешние порты на границах."""
     from .glr import GlobalRouter
     c = Core()
-    info = SEQ.build_seq(c, 8, 8, nw=nw, a1=a1, a2=a2, a3=a3, a4=a4)
+    info = SEQ.build_seq(c, 8, 8, cap=cap, ticks=ticks)
     bb = info["bbox"]
     x_out = ((bb[2] // 2) + 6) * 2
     outs = {}
@@ -235,6 +235,7 @@ def mod_seq(a1=6, a2=6, a3=6, a4=10, nw=4):
     for n in ("run", "rst"):
         m.weak.add(n)
     m.timing = info["ticks"]
+    m.chain_reps = {k: v["abs_reps"] for k, v in info["chains"].items()}
     return m
 
 

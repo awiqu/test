@@ -29,9 +29,12 @@ def setup(world_ready=False):
         for za in range(Z0, Z1 + 1, 128):
             S.cmd(f"fill {xa} {Y-1} {za} {min(xa+127,X1)} {Y-1} {min(za+127,Z1)} minecraft:stone")
     print(S.cmd(f"execute positioned 0 {Y} 0 run function {name}:build")[:60], flush=True)
-    S.step(450)
-    S.cmd(f"execute positioned 0 {Y} 0 run function {name}:refresh"); S.step(450)
-    S.cmd(f"execute positioned 0 {Y} 0 run function {name}:refresh"); S.step(450)
+    if "--auto" in sys.argv:
+        S.step(9000)                      # автосброс датапака отрабатывает сам (later1/later2/rst_press...)
+    else:
+        S.step(450)
+        S.cmd(f"execute positioned 0 {Y} 0 run function {name}:refresh"); S.step(450)
+        S.cmd(f"execute positioned 0 {Y} 0 run function {name}:refresh"); S.step(450)
 
 def press(btn, hold=24):
     x, z, d = ports[("panel", btn)]
@@ -89,7 +92,7 @@ if __name__ == "__main__":
           "пиксели", [(x, y) for y in range(32) for x in range(32) if cpu.fb[y][x]], flush=True)
     t = time.time()
     w = int(sys.argv[sys.argv.index("--wait")+1]) if "--wait" in sys.argv else 4000
-    for k in range(2 if "--rst2" in sys.argv else 1):
+    for k in range(0 if "--auto" in sys.argv else (2 if "--rst2" in sys.argv else 1)):
         print("RESET"); press("bRst"); S.step(w)
         pc = sum((1 if (S.power((ports[("PCL", f"q{i}")][0], Y + 0, ports[("PCL", f"q{i}")][1]), None, (0, 0, 0)) or 0) > 0 else 0) << i for i in range(0)) if False else None
         print("после RESET: run", run_lamp(), "регистры", [hex(r) for r in regs()], flush=True)
