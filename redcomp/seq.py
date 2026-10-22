@@ -56,8 +56,8 @@ def seqctl_grid():
     return cached(f"seqctl_{CTL_NI}x{CTL_NJ}", build)
 
 
-CAP = dict(dw=16, dr=1, d1=50, d2=20, d3=20, d4=50, dx=60)          # ёмкость цепочек (повторителей)
-TICKS = dict(dw=100, d1=700, d2=200, d3=200, d4=600, dx=480)         # задержки по умолчанию (игровые тики)
+CAP = dict(dw=16, dr=1, d1=75, d2=24, d3=24, d4=75, dx=60)          # ёмкость цепочек (повторителей)
+TICKS = dict(dw=50, d1=560, d2=120, d3=80, d4=560, dx=480)         # задержки по умолчанию (игровые тики)
 
 
 def build_seq(core, ox, oz, cap=None, ticks=None, width=22, mod="seq"):
