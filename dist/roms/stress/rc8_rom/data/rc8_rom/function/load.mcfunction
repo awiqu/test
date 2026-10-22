@@ -1,9 +1,10 @@
 # прошивка ПЗУ RC-8: stress.asm, 512 слов; ~ ~ ~ = та же точка, что у rc8:build
-place template rc8_rom:b0 ~40 ~1 ~553
-place template rc8_rom:b1 ~118 ~1 ~553
-place template rc8_rom:b2 ~196 ~1 ~553
-place template rc8_rom:b3 ~274 ~1 ~553
-clone ~40 ~1 ~553 ~70 ~1 ~807 ~40 ~1 ~553 replace force
-clone ~118 ~1 ~553 ~148 ~1 ~807 ~118 ~1 ~553 replace force
-clone ~196 ~1 ~553 ~226 ~1 ~807 ~196 ~1 ~553 replace force
-clone ~274 ~1 ~553 ~304 ~1 ~807 ~274 ~1 ~553 replace force
+place template rc8_rom:rom ~340 ~1 ~89
+clone ~340 ~1 ~88 ~370 ~1 ~216 ~340 ~1 ~88 replace force
+clone ~340 ~5 ~88 ~370 ~5 ~216 ~340 ~5 ~88 replace force
+clone ~340 ~9 ~88 ~370 ~9 ~216 ~340 ~9 ~88 replace force
+clone ~340 ~13 ~88 ~370 ~13 ~216 ~340 ~13 ~88 replace force
+clone ~340 ~17 ~88 ~370 ~17 ~216 ~340 ~17 ~88 replace force
+clone ~340 ~21 ~88 ~370 ~21 ~216 ~340 ~21 ~88 replace force
+clone ~340 ~25 ~88 ~370 ~25 ~216 ~340 ~25 ~88 replace force
+clone ~340 ~29 ~88 ~370 ~29 ~216 ~340 ~29 ~88 replace force
