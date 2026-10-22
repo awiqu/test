@@ -2,7 +2,7 @@
 from .grid import Grid
 
 
-def pixel_array(g: Grid, ox, oz, nx=32, ny=32, mat="stone", bulb="copper_bulb"):
+def pixel_array(g: Grid, ox, oz, nx=32, ny=32, mat="stone", bulb="waxed_copper_bulb"):
     """Матрица nx x ny. Шаг 4x4. Пиксель (i,j) переключается (T-триггер медного фонаря), когда
     строка j высокая (импульс PLOT) И столбец i выбран (активный высокий уровень):
         компаратор-вычитатель: вход сзади = строка, боковой = НЕ(столбец) (настенный факел на стенке столбца).

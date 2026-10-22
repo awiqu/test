@@ -14,5 +14,5 @@ write_datapack(g, d, name=name, tile=96, reset_btn=(rx, 0, rz + 2))
 bx0, bz0, bx1, bz1 = meta["mod_bbox"]["pixels"]
 fdir = os.path.join(d, name, "data", name, "function")
 with open(os.path.join(fdir, "clear_display.mcfunction"), "w") as f:
-    f.write(f"fill ~{bx0} ~0 ~{bz0} ~{bx1} ~0 ~{bz1} minecraft:copper_bulb[lit=false,powered=false] replace minecraft:copper_bulb\n")
+    f.write(f"fill ~{bx0} ~0 ~{bz0} ~{bx1} ~0 ~{bz1} minecraft:waxed_copper_bulb[lit=false,powered=false] replace minecraft:waxed_copper_bulb\n")
 print("ok", os.path.getsize(os.path.join(d, name, "data", name, "structure", "full.nbt")) // 1024, "КБ")

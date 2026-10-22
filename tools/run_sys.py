@@ -80,13 +80,21 @@ def pixels():
     on = []
     for j in range(32):
         for i in range(32):
-            if test(ox + 2 + 4 * i, 0, oz + 6 + 4 * j, "minecraft:copper_bulb[lit=true]"):
+            if test(ox + 2 + 4 * i, 0, oz + 6 + 4 * j, "minecraft:waxed_copper_bulb[lit=true]"):
                 on.append((i, j))
     return on
 
 if __name__ == "__main__":
     if "--setup" in sys.argv:
         setup()
+    if "--asm" in sys.argv:
+        from redcomp.asm import assemble
+        words = assemble(open(sys.argv[sys.argv.index("--asm") + 1]).read())
+        if "--loadrom" in sys.argv:
+            print(S.cmd(f"execute positioned 0 {Y} 0 run function {name}_rom:load")[:80]); S.step(450)
+            S.cmd(f"execute positioned 0 {Y} 0 run function {name}:refresh"); S.step(450)
+            S.cmd(f"execute positioned 0 {Y} 0 run function {name}:clear_display"); S.step(100)
+            press("bRst"); S.step(4000); press("bRst"); S.step(4000)
     cpu = Cpu(rom=words[:], levers=0); cpu.run(5000)
     print("эмулятор: шагов", cpu.steps, "регистры", [hex(r) for r in cpu.regs], "цифры", [hex(d) for d in cpu.digits],
           "пиксели", [(x, y) for y in range(32) for x in range(32) if cpu.fb[y][x]], flush=True)

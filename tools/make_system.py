@@ -55,5 +55,5 @@ tiles = write_datapack(core.g, a.out, name=a.name, tile=96, reset_btn=(rx, 0, rz
 bx0, bz0, bx1, bz1 = core.mod_bbox["pixels"]
 fdir = os.path.join(a.out, a.name, "data", a.name, "function")
 with open(os.path.join(fdir, "clear_display.mcfunction"), "w") as f:
-    f.write(f"fill ~{bx0} ~0 ~{bz0} ~{bx1} ~0 ~{bz1} minecraft:copper_bulb[lit=false,powered=false] replace minecraft:copper_bulb\n")
+    f.write(f"fill ~{bx0} ~0 ~{bz0} ~{bx1} ~0 ~{bz1} minecraft:waxed_copper_bulb[lit=false,powered=false] replace minecraft:waxed_copper_bulb\n")
 print("датапак:", tiles, "плиток в", os.path.join(a.out, a.name), flush=True)

@@ -215,3 +215,137 @@ def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=
     with open(os.path.join(root, "data", ns, "function", "refresh.mcfunction"), "w") as f:
         f.write("\n".join(upd) + "\n")
     return len(tl)
+
+
+# ---------------------------------------------------------------- Sponge .schem (WorldEdit/FAWE)
+def _varint(v, out):
+    while True:
+        b = v & 0x7F
+        v >>= 7
+        if v:
+            out.append(b | 0x80)
+        else:
+            out.append(b)
+            return
+
+
+def _dense(blocks: dict, origin, size, extra_air=True):
+    """плотный массив индексов палитры (x + z*W + y*W*L) и палитра [(name, props-tuple)]"""
+    W, H, L = size
+    ox, oy, oz = origin
+    pal = {("air", ()): 0}
+    plist = [("air", ())]
+    arr = [0] * (W * H * L)
+    for (x, y, z), b in blocks.items():
+        key = (b.name, tuple(sorted((k, _props_str(v)) for k, v in b.props.items())))
+        i = pal.get(key)
+        if i is None:
+            i = len(plist); pal[key] = i; plist.append(key)
+        arr[(x - ox) + (z - oz) * W + (y - oy) * W * L] = i
+    return arr, plist
+
+
+def _state_str(key):
+    name, props = key
+    return "minecraft:" + name + ("[" + ",".join(f"{k}={v}" for k, v in props) + "]" if props else "")
+
+
+def schem_bytes(blocks: dict, origin, size, offset=(0, 0, 0)):
+    arr, plist = _dense(blocks, origin, size)
+    data = bytearray()
+    for i in arr:
+        _varint(i, data)
+    root = {"Schematic": {
+        "Version": T.Int(2), "DataVersion": T.Int(DATA_VERSION),
+        "Metadata": {"Name": "RC-8", "Author": "rc8-generator"},
+        "Width": T.Short(size[0]), "Height": T.Short(size[1]), "Length": T.Short(size[2]),
+        "Offset": T.IntArray(list(offset)),
+        "PaletteMax": T.Int(len(plist)),
+        "Palette": {_state_str(k): T.Int(i) for i, k in enumerate(plist)},
+        "BlockData": T.ByteArray(bytes(data)),
+        "BlockEntities": T.List(10, [])}}
+    # WorldEdit ожидает корневой тег без имени с вложенным "Schematic" (v3) либо плоскую структуру (v2): пишем плоскую v2
+    flat = root["Schematic"]
+    return nbt_bytes(flat, name="Schematic")
+
+
+# ---------------------------------------------------------------- Litematica .litematic
+def litematic_bytes(blocks: dict, origin, size, name="RC-8", author="rc8-generator", description=""):
+    arr, plist = _dense(blocks, origin, size)
+    bits = max(2, (len(plist) - 1).bit_length())
+    nlongs = (len(arr) * bits + 63) // 64
+    longs = [0] * nlongs
+    for i, v in enumerate(arr):
+        if v:
+            bit = i * bits
+            li, off = divmod(bit, 64)
+            longs[li] |= (v << off) & 0xFFFFFFFFFFFFFFFF
+            if off + bits > 64:
+                longs[li + 1] |= v >> (64 - off)
+    longs = [x - (1 << 64) if x >= (1 << 63) else x for x in longs]
+    pal = []
+    for key in plist:
+        e = {"Name": "minecraft:" + key[0]}
+        if key[1]:
+            e["Properties"] = {k: v for k, v in key[1]}
+        pal.append(e)
+    import time as _t
+    now = int(_t.time() * 1000)
+    total = sum(1 for v in arr if v)
+    root = {"MinecraftDataVersion": T.Int(DATA_VERSION), "Version": T.Int(6),
+            "Metadata": {"Name": name, "Author": author, "Description": description,
+                         "TimeCreated": T.Long(now), "TimeModified": T.Long(now),
+                         "EnclosingSize": {"x": T.Int(size[0]), "y": T.Int(size[1]), "z": T.Int(size[2])},
+                         "RegionCount": T.Int(1), "TotalBlocks": T.Int(total), "TotalVolume": T.Int(len(arr))},
+            "Regions": {name: {
+                "Position": {"x": T.Int(0), "y": T.Int(0), "z": T.Int(0)},
+                "Size": {"x": T.Int(size[0]), "y": T.Int(size[1]), "z": T.Int(size[2])},
+                "BlockStatePalette": T.List(10, pal),
+                "BlockStates": T.LongArray(longs),
+                "TileEntities": T.List(10, []), "Entities": T.List(10, []),
+                "PendingBlockTicks": T.List(10, []), "PendingFluidTicks": T.List(10, [])}}}
+    return nbt_bytes(root)
+
+
+# ---------------------------------------------------------------- самопроверка форматов
+def schem_read(data: bytes):
+    """обратное чтение .schem -> {(x,y,z): state-строка} (для проверки)"""
+    r = nbt_read(data)
+    W, H, L = r["Width"], r["Height"], r["Length"]
+    inv = {v: k for k, v in r["Palette"].items()}
+    bd = r["BlockData"]
+    out, i, idx = {}, 0, 0
+    while i < len(bd):
+        v = 0; sh = 0
+        while True:
+            b = bd[i]; i += 1
+            v |= (b & 0x7F) << sh; sh += 7
+            if not b & 0x80:
+                break
+        if inv[v] != "minecraft:air":
+            x = idx % W; z = (idx // W) % L; y = idx // (W * L)
+            out[(x, y, z)] = inv[v]
+        idx += 1
+    return out
+
+
+def litematic_read(data: bytes):
+    r = nbt_read(data)
+    reg = list(r["Regions"].values())[0]
+    sx, sy, sz = reg["Size"]["x"], reg["Size"]["y"], reg["Size"]["z"]
+    pal = reg["BlockStatePalette"]
+    bits = max(2, (len(pal) - 1).bit_length())
+    longs = [x + (1 << 64) if x < 0 else x for x in reg["BlockStates"]]
+    out = {}
+    for idx in range(sx * sy * sz):
+        bit = idx * bits
+        li, off = divmod(bit, 64)
+        v = (longs[li] >> off)
+        if off + bits > 64:
+            v |= longs[li + 1] << (64 - off)
+        v &= (1 << bits) - 1
+        if v:
+            e = pal[v]
+            st = e["Name"] + ("[" + ",".join(f"{k}={x}" for k, x in sorted(e.get("Properties", {}).items())) + "]" if e.get("Properties") else "")
+            out[(idx % sx, idx // (sx * sz), (idx // sx) % sz)] = st
+    return out
