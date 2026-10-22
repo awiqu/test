@@ -135,6 +135,7 @@ class GlobalRouter:
         if out[0] != "OK":
             R.failed = out[0]
             R.overuse = [ln for ln in out[1:] if ln.startswith("O ")]
+            R.fail_terms = [(int(ln.split()[1]), int(ln.split()[2])) for ln in out[1:] if ln.startswith("T ")]
             return False
         R.routes = {}
         cur = None

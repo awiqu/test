@@ -135,31 +135,42 @@ int main() {
             auto &tm = terms[k];
             if (tm.size() < 2) { if (!tm.empty()) res.insert(rn(tm[0][0], tm[0][1], 0)); }
             else {
-                vector<int> tree; tree.push_back(nodeId(tm[0][0], tm[0][1], 0)); res.insert(tree[0]);
-                vector<array<int,2>> rest(tm.begin() + 1, tm.end());
-                // отмена режимов предыдущей сети
-                fill(curRamp.begin(), curRamp.end(), 0); fill(curFlat.begin(), curFlat.end(), 0);
-                fill(curLow.begin(), curLow.end(), 0); fill(curD2.begin(), curD2.end(), 0);
-                while (!rest.empty()) {
-                    vector<char> isT(2 * N, 0);
-                    for (auto &t : rest) isT[nodeId(t[0], t[1], 0)] = 1;
-                    vector<array<int,3>> path; int endN;
-                    if (!astar(tree, isT, rest, path, endN)) { printf("FAIL %d\n", k); return 1; }
-                    routes[k].push_back(path);
-                    for (auto &p : path) { tree.push_back(nodeId(p[0], p[1], p[2])); res.insert(nodeId(p[0], p[1], p[2])); if (p[2] == 1) curD2[p[1] * ni + p[0]] = 1; }
-                    for (size_t q = 1; q < path.size(); q++) {
-                        auto &a = path[q - 1], &b = path[q];
-                        int d = -1; for (int dd = 0; dd < 4; dd++) if (a[0] + DI[dd] == b[0] && a[1] + DJ[dd] == b[1]) d = dd;
-                        int lo_i, lo_j, dir; int key = keyOf(a[0], a[1], d, lo_i, lo_j, dir);
-                        if (a[2] == b[2]) { res.insert(rs(lo_i, lo_j, dir, a[2])); curFlat[key] = 1; }
-                        else {
-                            int li = a[2] == 0 ? a[0] : b[0], lj = a[2] == 0 ? a[1] : b[1];
-                            res.insert(rs(lo_i, lo_j, dir, 0)); res.insert(rs(lo_i, lo_j, dir, 1)); res.insert(rn(li, lj, 1));
-                            curRamp[key] = 1; curLow[lj * ni + li] = 1;
+                static mt19937 rng(12345);
+                bool done = false;
+                vector<array<int,2>> lastRest;
+                for (int attempt = 0; attempt < 8 && !done; attempt++) {
+                    res.clear(); routes[k].clear();
+                    vector<int> tree; tree.push_back(nodeId(tm[0][0], tm[0][1], 0)); res.insert(tree[0]);
+                    vector<array<int,2>> rest(tm.begin() + 1, tm.end());
+                    if (attempt > 0) shuffle(rest.begin(), rest.end(), rng);
+                    fill(curRamp.begin(), curRamp.end(), 0); fill(curFlat.begin(), curFlat.end(), 0);
+                    fill(curLow.begin(), curLow.end(), 0); fill(curD2.begin(), curD2.end(), 0);
+                    bool fail = false;
+                    while (!rest.empty()) {
+                        vector<char> isT(2 * N, 0);
+                        vector<array<int,2>> targets;
+                        if (attempt == 0) { for (auto &t : rest) { isT[nodeId(t[0], t[1], 0)] = 1; } targets = rest; }
+                        else { isT[nodeId(rest[0][0], rest[0][1], 0)] = 1; targets = {rest[0]}; }
+                        vector<array<int,3>> path; int endN;
+                        if (!astar(tree, isT, targets, path, endN)) { fail = true; lastRest = rest; break; }
+                        routes[k].push_back(path);
+                        for (auto &p : path) { tree.push_back(nodeId(p[0], p[1], p[2])); res.insert(nodeId(p[0], p[1], p[2])); if (p[2] == 1) curD2[p[1] * ni + p[0]] = 1; }
+                        for (size_t q = 1; q < path.size(); q++) {
+                            auto &a = path[q - 1], &b = path[q];
+                            int d = -1; for (int dd = 0; dd < 4; dd++) if (a[0] + DI[dd] == b[0] && a[1] + DJ[dd] == b[1]) d = dd;
+                            int lo_i, lo_j, dir; int key = keyOf(a[0], a[1], d, lo_i, lo_j, dir);
+                            if (a[2] == b[2]) { res.insert(rs(lo_i, lo_j, dir, a[2])); curFlat[key] = 1; }
+                            else {
+                                int li = a[2] == 0 ? a[0] : b[0], lj = a[2] == 0 ? a[1] : b[1];
+                                res.insert(rs(lo_i, lo_j, dir, 0)); res.insert(rs(lo_i, lo_j, dir, 1)); res.insert(rn(li, lj, 1));
+                                curRamp[key] = 1; curLow[lj * ni + li] = 1;
+                            }
                         }
+                        for (auto q = rest.begin(); q != rest.end();) { if (nodeId((*q)[0], (*q)[1], 0) == endN) q = rest.erase(q); else ++q; }
                     }
-                    for (auto q = rest.begin(); q != rest.end();) { if (nodeId((*q)[0], (*q)[1], 0) == endN) q = rest.erase(q); else ++q; }
+                    if (!fail) done = true;
                 }
+                if (!done) { printf("FAIL %d\n", k); for (auto &t : lastRest) printf("T %d %d\n", t[0], t[1]); return 1; }
             }
             for (int r : res) { users[r].push_back(k); netRes[k].push_back(r); }
         }

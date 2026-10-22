@@ -520,3 +520,15 @@ def make_labels(core):
             if placed:
                 break
     return out
+
+
+def explain_failure(core, gr):
+    """для неудачной цепи: какие терминалы недостижимы и что вокруг них"""
+    R = gr.R
+    out = []
+    for (i, j) in getattr(R, "fail_terms", []):
+        x, z = R.xz(i, j)
+        near = [m for m, b in core.mod_bbox.items() if b[0] - 40 <= x <= b[2] + 40 and b[1] - 40 <= z <= b[3] + 40]
+        blkn = [(di, dj) for di in (-1, 0, 1) for dj in (-1, 0, 1) if (i + di, j + dj) in R.blk]
+        out.append(((x, z), near, "заблокированные соседние узлы:" + str(blkn)))
+    return out
