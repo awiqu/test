@@ -182,6 +182,10 @@ def mod_panel():
         m.port(f"lev{i}", x, 4, "N")
         x += 6
     x += 4
+    g.dust(x, 0, 4)                     # рычаг SLOW (медленный такт)
+    g.lever(x, 0, 5, face="floor", facing="north")
+    m.port("slow", x, 4, "N")
+    x += 8
     g.dust(x, 0, 4)                     # лампа RUN
     g.put(x, 0, 5, "redstone_lamp", lit="false")
     m.port("runlamp", x, 4, "N")
@@ -203,7 +207,7 @@ def mod_seq(cap=None, ticks=None):
         z = 8 + 4 * k
         c.ext(f"o_{net}", x_out, z, "W")
     # внешние входы: пины на западной границе макроса, внутренние цепи до ctl
-    for k, n in enumerate(("bStart", "bStop", "bStep", "bRst", "hlt")):
+    for k, n in enumerate(("bStart", "bStop", "bStep", "bRst", "hlt", "slow")):
         c.ext(f"i_{n}", 2, 8 + 4 * k, "E")
         c.net(f"seq.in_{n}", ("ext", f"i_{n}"), [("seq.ctl", n)])
     # внешние выходы как дополнительные стоки
@@ -221,12 +225,12 @@ def mod_seq(cap=None, ticks=None):
     gr.weak = set(c.weak)
     for name, src, sinks in c.nets:
         gr.add_net(name, src, sinks)
-    if not gr.route(iters=60, verbose=False):
+    if not gr.route(iters=400, verbose=False):
         raise RuntimeError("секвенсор: маршрутизация не удалась")
     gr.emit()
     m = Mod("seq")
     m.g = c.g
-    for n in ("bStart", "bStop", "bStep", "bRst", "hlt"):
+    for n in ("bStart", "bStop", "bStep", "bRst", "hlt", "slow"):
         x, z, d = c.ports[("ext", f"i_{n}")]
         m.port(n, x, z, "W")
     for n in ("p1", "p2", "p3", "rst", "run"):
@@ -362,6 +366,7 @@ def system_nets():
     for n in ("bStart", "bStop", "bStep", "bRst"):
         N(n, ("panel", n), [("seq", n)])
     N("run", ("seq", "run"), [("panel", "runlamp")])
+    N("slow", ("panel", "slow"), [("seq", "slow")])
     # --- регистры
     for r in range(8):
         N(f"sA{r}", ("selA", f"s{r}"), [("regA", f"sel{r}")])

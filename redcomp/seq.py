@@ -7,9 +7,9 @@ from .grid import Grid
 from .lattice import Netlist
 from .modules import lattice_module, delay_chain, cached, distribute_delay
 
-INS = ["bStart", "bStop", "bStep", "bRst", "hlt", "fb", "qd", "runD", "p3"]
+INS = ["bStart", "bStop", "bStep", "bRst", "hlt", "fb0", "x", "slow", "qd", "runD", "p3"]
 OUTS = ["q", "run", "rstl"]
-CTL_NI, CTL_NJ = 16, 14
+CTL_NI, CTL_NJ = 18, 16
 
 
 def seqctl_netlist():
@@ -22,6 +22,10 @@ def seqctl_netlist():
     nl.nor("nrun", ["bStart", "run"])
     nl.nor("x1", ["bStart", "bStep", "bRst"])
     nl.nor("inj", ["x1", "runD"])           # нажатие при остановленной машине
+    # выбор скорости: быстро (fb0) или медленно (x = fb0 через дополнительную цепочку)
+    nl.NOT("fb0", "nfb0"); nl.NOT("slow", "nslow"); nl.NOT("x", "nx")
+    nl.nor("fb", ["nfb0", "slow"])
+    nl.nor("fb", ["nx", "nslow"])
     nl.NOT("fb", "nfb")
     nl.nor("inj", ["nfb", "nrun"])          # возврат кольца при RUN
     nl.nor("q", ["qd", "nq"])
@@ -52,8 +56,8 @@ def seqctl_grid():
     return cached(f"seqctl_{CTL_NI}x{CTL_NJ}", build)
 
 
-CAP = dict(dw=16, dr=1, d1=50, d2=20, d3=20, d4=50)          # ёмкость цепочек (повторителей)
-TICKS = dict(dw=100, d1=700, d2=200, d3=200, d4=600)         # задержки по умолчанию (игровые тики)
+CAP = dict(dw=16, dr=1, d1=50, d2=20, d3=20, d4=50, dx=60)          # ёмкость цепочек (повторителей)
+TICKS = dict(dw=100, d1=700, d2=200, d3=200, d4=600, dx=480)         # задержки по умолчанию (игровые тики)
 
 
 def build_seq(core, ox, oz, cap=None, ticks=None, width=22, mod="seq"):
@@ -77,7 +81,7 @@ def build_seq(core, ox, oz, cap=None, ticks=None, width=22, mod="seq"):
     chains = {}
     cap = {**CAP, **(cap or {})}
     tk = {**TICKS, **(ticks or {})}
-    for name in ("dw", "dr", "d1", "d2", "d3", "d4"):
+    for name in ("dw", "dr", "d1", "d2", "d3", "d4", "dx"):
         n = cap[name]
         sub = Grid()
         c = delay_chain(sub, 0, 0, n, 4, width)
@@ -99,7 +103,8 @@ def build_seq(core, ox, oz, cap=None, ticks=None, width=22, mod="seq"):
     N(f"{mod}.p1", (f"{mod}.d1", "out"), [(f"{mod}.d2", "in")])
     N(f"{mod}.p2", (f"{mod}.d2", "out"), [(f"{mod}.d3", "in")])
     N(f"{mod}.p3", (f"{mod}.d3", "out"), [(f"{mod}.d4", "in"), (f"{mod}.ctl", "p3")])
-    N(f"{mod}.fb", (f"{mod}.d4", "out"), [(f"{mod}.ctl", "fb")])
+    N(f"{mod}.fb", (f"{mod}.d4", "out"), [(f"{mod}.ctl", "fb0"), (f"{mod}.dx", "in")])
+    N(f"{mod}.fx", (f"{mod}.dx", "out"), [(f"{mod}.ctl", "x")])
     N(f"{mod}.run", (f"{mod}.ctl", "run"), [(f"{mod}.dr", "in")], weak=True)
     N(f"{mod}.runD", (f"{mod}.dr", "out"), [(f"{mod}.ctl", "runD")])
     ticks = {k: c["ticks"] for k, c in chains.items()}
