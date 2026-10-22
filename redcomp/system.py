@@ -19,11 +19,14 @@ class Mod:
         self.name = name
         self.g = Grid()
         self.ports = {}          # имя -> (x, z, dir)
+        self.pin_y = {}          # имя -> высота пина над основанием модуля (по умолчанию 0)
         self.weak = set()        # имена выходных портов со слабым сигналом
         self.nets_in = []        # внутренние цепи (имя, (мод,порт) ...) — для макросов (не используется)
 
-    def port(self, name, x, z, d):
+    def port(self, name, x, z, d, y=0):
         self.ports[name] = (x, z, d)
+        if y:
+            self.pin_y[name] = y
 
     def bbox(self):
         xs = [p[0] for p in self.g.b]; zs = [p[2] for p in self.g.b]
@@ -105,13 +108,14 @@ def mod_latch(name, n):
 
 
 def mod_rom(words):
+    """ПЗУ-башня (rom3d): адрес — пины на основании, выходы IR — пины на верхушке башни"""
+    from .rom3d import build_rom3d
     m = Mod("rom")
-    core = Core()
-    info = build_rom(core, 4, 10, words)
-    m.g = core.g
-    for (mn, pn), (x, z, d) in core.ports.items():
-        m.port(f"{mn}.{pn}", x, z, d)
-    m.info = info
+    R = build_rom3d(words)
+    m.g = R["g"]
+    for n, (x, z, d) in R["ports"].items():
+        m.port(n, x, z, d, R["pin_y"].get(n, 0))
+    m.info = R
     return m
 
 
@@ -257,20 +261,30 @@ MODCOLOR = {
 }
 
 
-def place(core, mod, ox, oz, name=None):
-    """вставить модуль в Core со смещением; порты -> (имя_модуля, порт)"""
+FLOOR_H = 4
+
+
+def place(core, mod, ox, oz, name=None, oy=0):
+    """вставить модуль в Core со смещением (oy — высота этажа, кратна 4); порты -> (имя_модуля, порт).
+    Модуль на этаже oy>0 получает опорный пол под своей пылью/повторителями/компараторами уровня 0."""
     name = name or mod.name
-    assert ox % 2 == 0 and oz % 2 == 0, "смещение модуля должно быть чётным"
+    assert ox % 2 == 0 and oz % 2 == 0 and oy % 2 == 0, "смещение модуля должно быть чётным"
     col = MODCOLOR.get(name or mod.name)
     for (x, y, z), b in mod.g.b.items():
         nm = (col + "_concrete") if (col and b.name == "stone") else b.name
-        core.g.b[(x + ox, y, z + oz)] = Block(nm, b.props)
+        core.g.b[(x + ox, y + oy, z + oz)] = Block(nm, b.props, b.nbt)
+        if oy and y == 0 and b.name in ("redstone_wire", "repeater", "comparator"):
+            core.g.b.setdefault((x + ox, oy - 1, z + oz), Block((col + "_concrete") if col else "stone"))
     for pn, (x, z, d) in mod.ports.items():
         core.port(name, pn, x + ox, z + oz, d)
+        yy = oy + mod.pin_y.get(pn, 0)
+        if yy:
+            core.port_y[(name, pn)] = yy
         if pn in mod.weak:
             core.weak_ports.add((name, pn))
     b = mod.bbox()
     core.mod_bbox[name] = (b[0] + ox, b[1] + oz, b[2] + ox, b[3] + oz)
+    core.mod_floor[name] = oy
 
 
 PULSE_SPEC = (["p1", "p2", "p3", "wr", "setf", "isout", "isplot", "ishlt", "rst"],
@@ -331,7 +345,7 @@ def system_nets():
             s += [("wrdec", f"rd{k-9}"), ("jump", f"c{k-9}"), ("digsel", f"rd{k-9}")]
         if k <= 7: s.append(("imm", f"I{k}"))
         if k <= 8: s.append(("pc", f"a{k}"))
-        N(f"I{k}", ("rom", f"rom.I{k}"), s)
+        N(f"I{k}", ("rom", f"I{k}"), s)
     # --- управление -> АЛУ и прочее
     for n in ("sub", "nsub", "nfS", "nfAND", "nfOR", "nfXOR", "nfSHR", "nfIN"):
         s = [("alu", f"{n}{k}") for k in range(8)]
@@ -399,7 +413,7 @@ def system_nets():
     for k in range(9):
         N(f"n{k}", ("pc", f"n{k}"), [("NPC", f"d{k}")])
         N(f"nq{k}", ("NPC", f"q{k}"), [("PCL", f"d{k}")])
-        N(f"pcq{k}", ("PCL", f"q{k}"), [("pc", f"pc{k}")] + [("rom", f"rom.c{b}.a{k}") for b in range(4)])
+        N(f"pcq{k}", ("PCL", f"q{k}"), [("pc", f"pc{k}")] + ([("rom", f"a{k}")] if k < 9 else []))
     # --- цифры
     for s, nm in enumerate(SEG):
         N(f"seg{nm}", ("hex7", nm), [(f"DIG{d}", f"d{s}") for d in range(3)])
@@ -418,21 +432,29 @@ def system_nets():
 FRONT = [("dgt0", 12, 0), ("dgt1", 40, 0), ("dgt2", 68, 0), ("pixels", 0, 30), ("panel", 30, 30 + 132 + 18)]
 
 
-def route_system(core, margin=8, iters=80, verbose=True, tag=""):
-    from .glr import GlobalRouter
+def route_system(core, margin=8, iters=80, verbose=True, tag="", layers=0):
+    """layers=0: старый двухслойный маршрутизатор; layers>=3: многослойный (провода и поверх модулей)"""
     lo, hi = core.g.bbox()
     x1 = ((hi[0] + margin) // 2 + 1) * 2
     z1 = ((hi[2] + margin) // 2 + 1) * 2
-    gr = GlobalRouter(core.g, 0, 0, x1, z1)
+    if layers:
+        from .glr3 import GlobalRouter3
+        gr = GlobalRouter3(core.g, 0, 0, x1, z1, layers=layers)
+    else:
+        from .glr import GlobalRouter
+        gr = GlobalRouter(core.g, 0, 0, x1, z1)
     gr.mark_obstacles()
     gr.weak = set(core.weak)
     for name, src, sinks in core.nets:
-        gr.add_net(name, src, sinks)
+        if layers:
+            gr.add_net(name, src, sinks, ys=core.net_y.get(name))
+        else:
+            gr.add_net(name, src, sinks)
     ok = gr.route(iters=iters, verbose=verbose)
     return gr, ok
 
 
-def build_system(words, halo=24, seed=1, iters=20000, verbose=True, seq_params=None, plan=None, pin_k=1.0):
+def build_system(words, halo=24, seed=1, iters=20000, verbose=True, seq_params=None, plan=None, pin_k=1.0, nfloors=1, floors=None):
     from .floorplan import make_units, anneal
     mods = make_modules(words, seq_params)
     # жёсткий блок переднего плана: цифры над дисплеем, пульт под ним
@@ -440,7 +462,13 @@ def build_system(words, halo=24, seed=1, iters=20000, verbose=True, seq_params=N
     nets = system_nets()
     if plan is None:
         units = make_units(mods, groups)
-        plan = anneal(units, mods, nets, halo=halo, iters=iters, seed=seed, verbose=verbose, pin_k=pin_k)
+        if nfloors > 1:
+            from .floorplan3 import anneal3
+            plan, floors = anneal3(units, mods, nets, nfloors=nfloors, halo=halo, iters=iters, seed=seed, verbose=verbose,
+                                   pin_k=pin_k, tall={"rom"}, fixed_floor={"front": 0})
+        else:
+            plan = anneal(units, mods, nets, halo=halo, iters=iters, seed=seed, verbose=verbose, pin_k=pin_k)
+    floors = floors or {m: 0 for m in plan}
     # нормализация: минимум >= 4, чётность
     mx = min(plan[m][0] + mods[m].bbox()[0] for m in plan)
     mz = min(plan[m][1] + mods[m].bbox()[1] for m in plan)
@@ -448,7 +476,8 @@ def build_system(words, halo=24, seed=1, iters=20000, verbose=True, seq_params=N
     plan = {m: (x + sx, z + sz) for m, (x, z) in plan.items()}
     core = Core()
     for m, (x, z) in plan.items():
-        place(core, mods[m], x, z, name=m)
+        place(core, mods[m], x, z, name=m, oy=FLOOR_H * floors.get(m, 0))
+    core.floors = floors
     for name, src, sinks in nets:
         core.net(name, src, sinks, weak=(src in core.weak_ports))
     return core, plan, mods

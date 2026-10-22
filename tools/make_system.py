@@ -10,7 +10,7 @@ from redcomp.netcheck import check_nets, find_shorts
 
 ap = argparse.ArgumentParser()
 ap.add_argument("asm")
-ap.add_argument("--halo", type=int, default=20)
+ap.add_argument("--halo", type=int, default=8)
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--iters", type=int, default=30000)
 ap.add_argument("--route-iters", type=int, default=150)
@@ -18,6 +18,9 @@ ap.add_argument("--out", default="/tmp/mc/dp")
 ap.add_argument("--name", default="rc8")
 ap.add_argument("--ticks", default="", help="например dw=100,d1=700,d2=200,d3=200,d4=600 (игровые тики)")
 ap.add_argument("--plan", default=None)
+ap.add_argument("--layers", type=int, default=18, help="слоёв проводки (0 = старый двухслойный маршрутизатор)")
+ap.add_argument("--pin-k", type=float, default=0.3)
+ap.add_argument("--floors", type=int, default=1, help="число этажей размещения (модули друг над другом)")
 a = ap.parse_args()
 
 words = assemble(open(a.asm).read())
@@ -26,11 +29,11 @@ plan = pickle.load(open(a.plan, "rb")) if a.plan else None
 halo = a.halo
 for attempt in range(4):
     t = time.time()
-    core, plan_, mods = build_system(words, halo=halo, seed=a.seed, iters=a.iters, verbose=False, seq_params=seqp, plan=plan)
+    core, plan_, mods = build_system(words, halo=halo, seed=a.seed, iters=a.iters, verbose=False, seq_params=seqp, plan=plan, pin_k=a.pin_k, nfloors=a.floors)
     lo, hi = core.g.bbox()
     print(f"[{attempt}] размещение halo={halo}: {hi[0]-lo[0]}x{hi[2]-lo[2]} ({time.time()-t:.0f} c)", flush=True)
     t = time.time()
-    gr, ok = route_system(core, verbose=False, iters=a.route_iters)
+    gr, ok = route_system(core, verbose=False, iters=a.route_iters, layers=a.layers)
     print(f"[{attempt}] трассировка: {'успех' if ok else 'НЕУДАЧА ' + str(gr.R.failed)} ({time.time()-t:.0f} c)", flush=True)
     if ok:
         break
@@ -43,14 +46,14 @@ for pos, b in core.g.b.items():                     # оставшийся ка�
     if b.name == "stone":
         b.name = "light_gray_concrete"
 core.g.fix_wires()
-bad = check_nets(core.g, core.nets, verbose=False)
-sh = find_shorts(core.g, core.nets, verbose=False)
+bad = check_nets(core.g, core.nets, verbose=False, net_y=core.net_y)
+sh = find_shorts(core.g, core.nets, verbose=False, net_y=core.net_y)
 print(f"проверка: слабых/недостижимых {len(bad)}, замыканий {len(sh)}, блоков {len(core.g.b)}", flush=True)
 assert not bad and not sh
 labels = make_labels(core)
 os.makedirs(a.out, exist_ok=True)
 pickle.dump({"plan": plan_, "labels": labels, "ports": core.ports, "nets": core.nets, "mod_bbox": core.mod_bbox,
-             "timing": getattr(mods["seq"], "timing", None), "words": words,
+             "timing": getattr(mods["seq"], "timing", None), "words": words, "floors": core.floors, "floor_y": core.mod_floor,
              "seq_chains": {k: [(x + plan_["seq"][0], y, z + plan_["seq"][1]) for (x, y, z) in v] for k, v in mods["seq"].chain_reps.items()}},
             open(os.path.join(a.out, a.name + "_meta.pkl"), "wb"))
 pickle.dump({p: (b.name, dict(b.props)) for p, b in core.g.b.items()}, open(os.path.join(a.out, a.name + "_grid.pkl"), "wb"))

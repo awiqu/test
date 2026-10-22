@@ -34,6 +34,9 @@ class Core:
         self.ports = {}          # (module, port) -> (x, z, dir)
         self.nets = []           # (name, src, [sinks])
         self.floor_y = -1
+        self.port_y = {}         # (модуль, порт) -> высота пина (по умолчанию 0)
+        self.net_y = {}          # цепь -> [высоты пинов: источник, стоки...]
+        self.mod_floor = {}      # модуль -> высота этажа (y)
         self.weak_ports = set()   # (модуль, порт) со слабым источником
         self.mod_bbox = {}
         self.weak = set()        # цепи со слабым источником (выход решёточного модуля): повторитель у источника
@@ -63,6 +66,7 @@ class Core:
             self.weak.add(name)
         sp = self.ports[src] if isinstance(src, tuple) else src
         self.nets.append((name, sp, [self.ports[s] if isinstance(s, tuple) else s for s in sinks]))
+        self.net_y[name] = [self.port_y.get(p, 0) if isinstance(p, tuple) else 0 for p in [src] + list(sinks)]
 
 
 def build_core(core: Core, verbose=True):

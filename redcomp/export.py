@@ -200,7 +200,9 @@ def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=
         f.write(structure_nbt(g.b, (bx0, by0, bz0), size))
     lines.append(f"place template {ns}:full ~{bx0 - gx0 + base[0]} ~{by0 - gy0 + base[1]} ~{bz0 - gz0 + base[2]}")
     upd = []
-    tl = tiles(g, tile)            # плитки нужны только для /clone (лимит 32768 блоков на команду)
+    import math
+    tile = max(8, min(tile, int(math.sqrt(32000 / max(1, by1 - by0 + 1))) // 2 * 2))   # лимит /clone: 32768 блоков
+    tl = tiles(g, tile)            # плитки нужны только для /clone
     for (ti, tj), ((ox, oy, oz), (sx, sy, sz), bl) in sorted(tl.items()):
         dx, dy, dz = ox - gx0 + base[0], oy - gy0 + base[1], oz - gz0 + base[2]
         upd.append(f"clone ~{dx} ~{dy} ~{dz} ~{dx+sx-1} ~{dy+sy-1} ~{dz+sz-1} ~{dx} ~{dy} ~{dz} replace force")

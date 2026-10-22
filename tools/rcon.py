@@ -1,8 +1,9 @@
 """Минимальный RCON-клиент для тестов на живом сервере Minecraft."""
-import socket, struct, time
+import os, socket, struct, time
 
 class Rcon:
-    def __init__(self, host="127.0.0.1", port=25575, password="test"):
+    def __init__(self, host="127.0.0.1", port=None, password="test"):
+        port = port or int(os.environ.get("RCON_PORT", 25575))
         self.s = socket.create_connection((host, port))
         self._id = 0
         self._send(3, password)

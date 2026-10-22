@@ -9,6 +9,7 @@ dp = os.environ.get("RC8_DP") or (sys.argv[1] if len(sys.argv) > 1 and not sys.a
 name = os.environ.get("RC8_NAME", "rc8")
 meta = pickle.load(open(os.path.join(dp, name + "_meta.pkl"), "rb"))
 plan, ports, words = meta["plan"], meta["ports"], meta["words"]
+floors = meta.get("floor_y", {})            # модуль -> высота этажа (y)
 S = Server()
 Y = -60                                  # y=0 сетки
 def blk(x, y, z): return (x, Y + y, z)
@@ -53,11 +54,12 @@ def run_lamp():
 
 def regs():
     ox, oz = plan["regA"]
+    oy = floors.get("regA", 0)
     out = []
     for r in range(8):
         v = 0
         for k in range(8):
-            if test(ox + 8 + 10 * r, 0, oz + 10 + 8 * k, "minecraft:repeater[powered=true]"):
+            if test(ox + 8 + 10 * r, oy, oz + 10 + 8 * k, "minecraft:repeater[powered=true]"):
                 v |= 1 << k
         out.append(v)
     return out

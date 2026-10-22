@@ -87,11 +87,12 @@ def cells_of(g: Grid, src):
     return seen
 
 
-def find_shorts(g: Grid, nets, verbose=True):
+def find_shorts(g: Grid, nets, verbose=True, net_y=None):
     """замыкания между цепями: клетка достижима из источников двух разных цепей"""
     owner, shorts = {}, []
+    net_y = net_y or {}
     for name, src, sinks in nets:
-        for c in cells_of(g, (src[0], 0, src[1])):
+        for c in cells_of(g, (src[0], net_y.get(name, [0])[0], src[1])):
             if c in owner and owner[c] != name:
                 shorts.append((owner[c], name, c))
             else:
@@ -103,15 +104,17 @@ def find_shorts(g: Grid, nets, verbose=True):
     return shorts
 
 
-def check_nets(g: Grid, nets, weak=(), verbose=True):
+def check_nets(g: Grid, nets, weak=(), verbose=True, net_y=None):
     """nets: [(name, (x,z,dir), [(x,z,dir)...])]; возвращает список проблем"""
     problems = []
+    net_y = net_y or {}
     for name, src, sinks in nets:
-        sp = (src[0], 0, src[1])
+        ys = net_y.get(name) or [0] * (1 + len(sinks))
+        sp = (src[0], ys[0], src[1])
         lvl = 15
         best = reach(g, sp, lvl)
-        for sk in sinks:
-            q = (sk[0], 0, sk[1])
+        for sk, yk in zip(sinks, ys[1:]):
+            q = (sk[0], yk, sk[1])
             l = best.get(q, 0)
             if l < 1:
                 problems.append((name, "сток недостижим", q))
