@@ -22,7 +22,8 @@
 ```
 dist/                     готовая постройка (после tools/build.py)
   datapack/rc8            датапак: /function rc8:prepare, rc8:build
-  datapack/rc8_rom        прошивка ПЗУ (программа): /function rc8_rom:load
+  datapack/rc8_rom        прошивка ПЗУ (test_all): /function rc8_rom:load
+  roms/<программа>/rc8_rom   прошивки других примеров (stress, demo_count, fuzz7) — подменяют datapack/rc8_rom
   rc8.nbt  rc8.schem  rc8.litematic   та же постройка целиком (структура, WorldEdit, Litematica)
 programs/                 примеры на ассемблере RC-8
 tools/rc8asm.py           ассемблер / дизассемблер / эмулятор
