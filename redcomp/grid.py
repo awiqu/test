@@ -21,10 +21,11 @@ SOURCE_COMPONENTS = ("redstone_torch", "redstone_wall_torch", "lever", "redstone
                      "stone_button", "observer")
 
 class Block:
-    __slots__ = ("name", "props")
-    def __init__(self, name, props=None):
+    __slots__ = ("name", "props", "nbt")
+    def __init__(self, name, props=None, nbt=None):
         self.name = name.replace("minecraft:", "")
         self.props = dict(props or {})
+        self.nbt = nbt                 # данные блока-сущности (таблички): dict для структуры NBT
     def state_str(self, with_ns=True):
         s = ("minecraft:" if with_ns else "") + self.name
         if self.props:

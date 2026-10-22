@@ -135,13 +135,32 @@ def structure_nbt(blocks: dict, origin, size):
             if key[1]:
                 e["Properties"] = {k: v for k, v in key[1]}
             plist.append(e)
-        out.append({"pos": T.List(3, [T.Int(x - ox), T.Int(y - oy), T.Int(z - oz)]), "state": T.Int(pal[key])})
+        ent = {"pos": T.List(3, [T.Int(x - ox), T.Int(y - oy), T.Int(z - oz)]), "state": T.Int(pal[key])}
+        if b.nbt is not None:
+            ent["nbt"] = b.nbt
+        out.append(ent)
     root = {"DataVersion": T.Int(DATA_VERSION),
             "size": T.List(3, [T.Int(s) for s in size]),
             "palette": T.List(10, plist),
             "blocks": T.List(10, out),
             "entities": T.List(10, [])}
     return nbt_bytes(root)
+
+
+def sign_nbt(lines):
+    """данные таблички (вид спереди), 4 строки"""
+    msgs = [str(l) for l in (list(lines) + ["", "", "", ""])[:4]]
+    blank = {"messages": T.List(8, ["", "", "", ""]), "color": "black", "has_glowing_text": T.Byte(0)}
+    return {"id": "minecraft:sign", "is_waxed": T.Byte(1),
+            "front_text": {"messages": T.List(8, msgs), "color": "black", "has_glowing_text": T.Byte(0)},
+            "back_text": blank}
+
+
+def apply_labels(g: Grid, labels):
+    """labels: [((x,y,z), [строки])] — добавить таблички (вид с юга)"""
+    from .grid import Block
+    for pos, lines in labels:
+        g.b[pos] = Block("oak_sign", {"rotation": 0, "waterlogged": "false"}, sign_nbt(lines))
 
 
 def tiles(g: Grid, tile=96):

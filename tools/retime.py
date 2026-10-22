@@ -3,7 +3,7 @@ import sys, os, pickle
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from redcomp.grid import Grid, Block
 from redcomp.modules import distribute_delay
-from redcomp.export import write_datapack
+from redcomp.export import write_datapack, apply_labels
 d = sys.argv[1]
 spec = dict((k, int(v)) for k, v in (kv.split("=") for kv in sys.argv[2].split(",")))
 name = "rc8"
@@ -23,6 +23,7 @@ pickle.dump(meta, open(os.path.join(d, name + "_meta.pkl"), "wb"))
 g = Grid()
 for p, (n, props) in data.items():
     g.b[p] = Block(n, props)
+apply_labels(g, meta.get("labels", []))
 rx, rz, _ = meta["ports"][("panel", "bRst")]
 write_datapack(g, d, name=name, tile=96, reset_btn=(rx, 0, rz + 2))
 bx0, bz0, bx1, bz1 = meta["mod_bbox"]["pixels"]

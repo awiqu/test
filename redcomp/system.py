@@ -239,12 +239,28 @@ def mod_seq(cap=None, ticks=None):
     return m
 
 
+# цвета опорных блоков по функциям (как на фото: бетон разных цветов)
+MODCOLOR = {
+    "control": "yellow", "selA": "yellow", "selB": "yellow", "wrdec": "yellow", "imm": "yellow",
+    "jump": "yellow", "pulse": "yellow", "flags": "yellow", "digsel": "yellow",
+    "pc": "orange", "NPC": "orange", "PCL": "orange",
+    "regA": "lime", "regB": "lime",
+    "alu": "red", "RES": "red", "FLG": "red",
+    "rom": "light_blue", "seq": "purple",
+    "hex7": "cyan", "coldec": "cyan", "rowdec": "cyan",
+    "DIG0": "magenta", "DIG1": "magenta", "DIG2": "magenta",
+    "dgt0": "black", "dgt1": "black", "dgt2": "black", "pixels": "black", "panel": "white",
+}
+
+
 def place(core, mod, ox, oz, name=None):
     """вставить модуль в Core со смещением; порты -> (имя_модуля, порт)"""
     name = name or mod.name
     assert ox % 2 == 0 and oz % 2 == 0, "смещение модуля должно быть чётным"
+    col = MODCOLOR.get(name or mod.name)
     for (x, y, z), b in mod.g.b.items():
-        core.g.b[(x + ox, y, z + oz)] = Block(b.name, b.props)
+        nm = (col + "_concrete") if (col and b.name == "stone") else b.name
+        core.g.b[(x + ox, y, z + oz)] = Block(nm, b.props)
     for pn, (x, z, d) in mod.ports.items():
         core.port(name, pn, x + ox, z + oz, d)
         if pn in mod.weak:
@@ -463,3 +479,39 @@ def check_pins(core, gr):
             if reasons:
                 bad.append((name, owner.get((x, z)), (x, z, d), reasons))
     return bad
+
+
+LABELS = {
+    "control": ("CONTROL", "УПРАВЛЕНИЕ"), "selA": ("REG SELECT A", "ВЫБОР A"), "selB": ("REG SELECT B", "ВЫБОР B"),
+    "wrdec": ("WRITE DECODE", "ЗАПИСЬ РЕГ."), "imm": ("IMMEDIATE", "КОНСТАНТА"), "jump": ("JUMP LOGIC", "ПЕРЕХОДЫ"),
+    "pulse": ("PULSES", "ИМПУЛЬСЫ"), "flags": ("FLAGS LOGIC", "ФЛАГИ"), "pc": ("PC + 1 / JUMP", "СЧЁТЧИК КОМАНД"),
+    "NPC": ("NEXT PC", "СЛЕД. АДРЕС"), "PCL": ("PC", "АДРЕС КОМАНДЫ"), "regA": ("REGISTERS R0-R7", "РЕГИСТРЫ (A)"),
+    "regB": ("REGISTERS R0-R7", "РЕГИСТРЫ (B)"), "alu": ("ALU 8 BIT", "АЛУ 8 БИТ"), "RES": ("RESULT", "РЕЗУЛЬТАТ"),
+    "FLG": ("FLAGS Z C", "ФЛАГИ Z C"), "rom": ("ROM 512 x 16", "ПЗУ ПРОГРАММЫ"), "seq": ("CLOCK", "ТАКТ / СЕКВЕНСОР"),
+    "hex7": ("HEX TO 7 SEG", "ДЕШИФРАТОР"), "digsel": ("DIGIT SELECT", "ВЫБОР ЦИФРЫ"),
+    "DIG0": ("DIGIT 0 LATCH", "ЦИФРА 0"), "DIG1": ("DIGIT 1 LATCH", "ЦИФРА 1"), "DIG2": ("DIGIT 2 LATCH", "ЦИФРА 2"),
+    "coldec": ("COLUMN DECODER", "ДЕКОДЕР X"), "rowdec": ("ROW DECODER", "ДЕКОДЕР Y"),
+    "pixels": ("DISPLAY 32 x 32", "ДИСПЛЕЙ"), "panel": ("CONTROL PANEL", "ПУЛЬТ"),
+}
+
+
+def make_labels(core):
+    """таблички у верхнего левого угла каждого модуля (в свободной клетке, не ближе 1 к чужим блокам)"""
+    occ = set((x, z) for (x, y, z) in core.g.b)
+    out = []
+    for mn, (txt1, txt2) in LABELS.items():
+        if mn not in core.mod_bbox:
+            continue
+        x0, z0, x1, z1 = core.mod_bbox[mn]
+        placed = False
+        for dz in range(3, 14):
+            for dx in range(0, 24):
+                x, z = x0 + dx, z0 - dz
+                if all((x + a, z + b) not in occ for a in (-1, 0, 1) for b in (-1, 0, 1)):
+                    out.append(((x, 0, z), [txt1, txt2, "", ""]))
+                    occ.add((x, z))
+                    placed = True
+                    break
+            if placed:
+                break
+    return out

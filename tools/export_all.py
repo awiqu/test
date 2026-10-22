@@ -8,7 +8,7 @@ python3 tools/export_all.py DIR [--out OUT]
 import sys, os, pickle, shutil, argparse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from redcomp.grid import Grid, Block
-from redcomp.export import structure_nbt, schem_bytes, litematic_bytes, bounds
+from redcomp.export import structure_nbt, schem_bytes, litematic_bytes, bounds, apply_labels
 
 ap = argparse.ArgumentParser()
 ap.add_argument("dir")
@@ -21,7 +21,9 @@ data = pickle.load(open(os.path.join(a.dir, a.name + "_grid.pkl"), "rb"))
 g = Grid()
 for p, (n, props) in data.items():
     g.b[p] = Block(n, props)
+meta = pickle.load(open(os.path.join(a.dir, a.name + "_meta.pkl"), "rb"))
 g.fix_wires()
+apply_labels(g, meta.get("labels", []))
 org, hi = bounds(g)
 size = (hi[0] - org[0] + 1, hi[1] - org[1] + 1, hi[2] - org[2] + 1)
 print("размер", size, "блоков", len(g.b))
