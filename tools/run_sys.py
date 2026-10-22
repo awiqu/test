@@ -88,8 +88,11 @@ if __name__ == "__main__":
     print("эмулятор: шагов", cpu.steps, "регистры", [hex(r) for r in cpu.regs], "цифры", [hex(d) for d in cpu.digits],
           "пиксели", [(x, y) for y in range(32) for x in range(32) if cpu.fb[y][x]], flush=True)
     t = time.time()
-    print("RESET"); press("bRst"); S.step(int(sys.argv[sys.argv.index("--wait")+1]) if "--wait" in sys.argv else 4000)
-    print("после RESET: run", run_lamp(), "регистры", [hex(r) for r in regs()], flush=True)
+    w = int(sys.argv[sys.argv.index("--wait")+1]) if "--wait" in sys.argv else 4000
+    for k in range(2 if "--rst2" in sys.argv else 1):
+        print("RESET"); press("bRst"); S.step(w)
+        pc = sum((1 if (S.power((ports[("PCL", f"q{i}")][0], Y + 0, ports[("PCL", f"q{i}")][1]), None, (0, 0, 0)) or 0) > 0 else 0) << i for i in range(0)) if False else None
+        print("после RESET: run", run_lamp(), "регистры", [hex(r) for r in regs()], flush=True)
     print("START"); press("bStart")
     waited = 0
     while waited < 60000:
