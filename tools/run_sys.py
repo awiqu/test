@@ -91,11 +91,13 @@ if __name__ == "__main__":
         from redcomp.asm import assemble
         words = assemble(open(sys.argv[sys.argv.index("--asm") + 1]).read())
         if "--loadrom" in sys.argv:
+            S.cmd("reload"); S.step(20)
             print(S.cmd(f"execute positioned 0 {Y} 0 run function {name}_rom:load")[:80]); S.step(450)
             S.cmd(f"execute positioned 0 {Y} 0 run function {name}:refresh"); S.step(450)
             S.cmd(f"execute positioned 0 {Y} 0 run function {name}:clear_display"); S.step(100)
             press("bRst"); S.step(4000); press("bRst"); S.step(4000)
-    cpu = Cpu(rom=words[:], levers=0); cpu.run(5000)
+    LEV = int(sys.argv[sys.argv.index("--lev") + 1]) if "--lev" in sys.argv else 0
+    cpu = Cpu(rom=words[:], levers=LEV); cpu.run(5000)
     print("эмулятор: шагов", cpu.steps, "регистры", [hex(r) for r in cpu.regs], "цифры", [hex(d) for d in cpu.digits],
           "пиксели", [(x, y) for y in range(32) for x in range(32) if cpu.fb[y][x]], flush=True)
     t = time.time()
@@ -104,6 +106,10 @@ if __name__ == "__main__":
         print("RESET"); press("bRst"); S.step(w)
         pc = sum((1 if (S.power((ports[("PCL", f"q{i}")][0], Y + 0, ports[("PCL", f"q{i}")][1]), None, (0, 0, 0)) or 0) > 0 else 0) << i for i in range(0)) if False else None
         print("после RESET: run", run_lamp(), "регистры", [hex(r) for r in regs()], flush=True)
+    if "--lev" in sys.argv:
+        for i in range(4):
+            lever(i, bool(LEV >> i & 1))
+        S.step(300)
     if "--slow" in sys.argv:
         lever("slow", True); S.step(300); print("рычаг SLOW включён")
     print("START"); press("bStart")
