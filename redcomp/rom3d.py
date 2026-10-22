@@ -65,9 +65,10 @@ def build_rom3d(words, ox=8, oz=24, nb=NB, mat="stone"):
     # ---- опорный пол яруса b>=1 только под пылью/повторителями/компараторами уровня 0 банка (остальным опора не нужна)
     tower_cols = {(in_x[n], z_in - 2) for n in ADDR} | {(xs[k], z_end + 3) for k in range(16)}
     need = set()
-    for pos, blk in banks[0].g.b.items():
-        if pos[1] == 0 and blk.name in ("redstone_wire", "repeater", "comparator"):
-            need.add((pos[0], pos[2]))
+    for bk in banks:                                      # входные цепи a6..a8 различаются по банкам: берём объединение
+        for pos, blk in bk.g.b.items():
+            if pos[1] == 0 and blk.name in ("redstone_wire", "repeater", "comparator"):
+                need.add((pos[0], pos[2]))
     for k in range(16):                                   # отводы выходов: пыль и повторитель после банка
         need.add((xs[k], z_end + 1)); need.add((xs[k], z_end + 2))
     for n in ADDR:

@@ -12,6 +12,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("asm")
 ap.add_argument("--halo", type=int, default=8)
 ap.add_argument("--seed", type=int, default=1)
+ap.add_argument("--seeds", type=int, default=8, help="сколько стартов отжига перебрать (берётся наименьшая площадь)")
 ap.add_argument("--iters", type=int, default=30000)
 ap.add_argument("--route-iters", type=int, default=150)
 ap.add_argument("--out", default="/tmp/mc/dp")
@@ -27,9 +28,27 @@ words = assemble(open(a.asm).read())
 seqp = dict(ticks={k: int(v) for k, v in (kv.split("=") for kv in a.ticks.split(",") if kv)})
 plan = pickle.load(open(a.plan, "rb")) if a.plan else None
 halo = a.halo
+
+
+def best_plan(halo):
+    """несколько стартов отжига -> план с наименьшей площадью габарита"""
+    best = None
+    for sd in range(a.seed, a.seed + a.seeds):
+        c, p_, m_ = build_system(words, halo=halo, seed=sd, iters=a.iters, verbose=False, seq_params=seqp, pin_k=a.pin_k, nfloors=a.floors)
+        lo_, hi_ = c.g.bbox()
+        area = (hi_[0] - lo_[0]) * (hi_[2] - lo_[2])
+        print(f"   старт {sd}: {hi_[0]-lo_[0]}x{hi_[2]-lo_[2]} = {area}", flush=True)
+        if best is None or area < best[0]:
+            best = (area, p_, dict(c.floors))
+    return best[1], best[2]
+
+
+floors_ = None
 for attempt in range(4):
     t = time.time()
-    core, plan_, mods = build_system(words, halo=halo, seed=a.seed, iters=a.iters, verbose=False, seq_params=seqp, plan=plan, pin_k=a.pin_k, nfloors=a.floors)
+    if plan is None:
+        plan, floors_ = best_plan(halo)
+    core, plan_, mods = build_system(words, halo=halo, seed=a.seed, iters=a.iters, verbose=False, seq_params=seqp, plan=plan, pin_k=a.pin_k, nfloors=a.floors, floors=floors_)
     lo, hi = core.g.bbox()
     print(f"[{attempt}] размещение halo={halo}: {hi[0]-lo[0]}x{hi[2]-lo[2]} ({time.time()-t:.0f} c)", flush=True)
     t = time.time()
@@ -37,7 +56,7 @@ for attempt in range(4):
     print(f"[{attempt}] трассировка: {'успех' if ok else 'НЕУДАЧА ' + str(gr.R.failed)} ({time.time()-t:.0f} c)", flush=True)
     if ok:
         break
-    plan = None
+    plan = None; floors_ = None
     halo += 8
 else:
     sys.exit("не удалось проложить цепи")

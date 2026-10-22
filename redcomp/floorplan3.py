@@ -201,6 +201,22 @@ def anneal3(units, mods, nets, nfloors=2, halo=8, iters=60000, seed=1, aspect=1.
         if verbose and it % 10000 == 0:
             print(f"  отжиг {it}: {cur:.0f} (лучшее {best[0]:.0f})")
     pos, fl = best[1], best[2]
+    # уплотнение: жадно двигаем юниты влево/вверх, пока допустимо (рост длины цепей не контролируем — выигрыш по площади)
+    minx = min(rect(u)[0] for u in units); minz = min(rect(u)[1] for u in units)
+    for _ in range(12):
+        moved_any = False
+        for u in sorted(units, key=lambda u: (pos[u.name][0] + u.x0, pos[u.name][1] + u.z0)):
+            for (dx, dz) in ((-1, 0), (0, -1)):
+                step = 64
+                while step >= 2:
+                    c = (pos[u.name][0] + dx * step, pos[u.name][1] + dz * step)
+                    r_ = rect(u, c)
+                    if r_[0] >= minx and r_[1] >= minz and legal(u, c):
+                        pos[u.name] = c; moved_any = True
+                    else:
+                        step //= 2
+        if not moved_any:
+            break
     out, floors = {}, {}
     for mn, (u, dx, dz) in where.items():
         out[mn] = (pos[u.name][0] + dx, pos[u.name][1] + dz)

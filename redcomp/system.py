@@ -46,6 +46,18 @@ def _pla_mod(name, spec, ox=4, oz=8):
     return m
 
 
+def _dec_mod(name, prefix, nbits=5, extra=None):
+    """дешифратор без B-плоскости (decoder.py): входы сверху, выходы s0.. справа"""
+    from .decoder import decoder
+    m = Mod(name)
+    d = decoder(m.g, 4, 8, prefix, nbits, extra)
+    for n, (x, y, z) in d.in_ports.items():
+        m.port(n, x, z, "N")
+    for n, (x, y, z) in d.out_ports.items():
+        m.port(n, x, z, "E")
+    return m
+
+
 def mod_control():
     m = Mod("control")
     p = build_control(m.g, 4, 8)
@@ -318,8 +330,8 @@ def make_modules(words, seq_params=None):
     for k in range(3):
         mods[f"DIG{k}"] = mod_latch(f"DIG{k}", 8)
         mods[f"dgt{k}"] = mod_digit()
-    mods["coldec"] = _pla_mod("coldec", decoder_spec("c"))
-    mods["rowdec"] = _pla_mod("rowdec", decoder_spec("r", 5, "pplot"))
+    mods["coldec"] = _dec_mod("coldec", "c")
+    mods["rowdec"] = _dec_mod("rowdec", "r", 5, "pplot")
     mods["pixels"] = mod_pixels()
     mods["panel"] = mod_panel()
     mods["rom"] = mod_rom(words)
