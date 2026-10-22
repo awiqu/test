@@ -179,7 +179,7 @@ int main() {
         fprintf(stderr, "итерация %d: перегрузка %d pf=%.2f\n", it, over, pf);
         if (!over) { ok = true; break; }
         for (int r = 0; r < NR; r++) if (users[r].size() > 1) hist[r] += 0.5f * (users[r].size() - 1);
-        pf *= pfm;
+        pf = min(pf * pfm, 20000.0f);
     }
     if (!ok) {
         printf("OVERUSE\n");

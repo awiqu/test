@@ -44,7 +44,7 @@ def press(btn, hold=24):
     S.cmd(f"setblock {x} {Y} {z+2} minecraft:stone_button[face=floor,facing=north,powered=false]")
 
 def lever(i, on):
-    x, z, d = ports[("panel", f"lev{i}")]
+    x, z, d = ports[("panel", i if isinstance(i, str) else f"lev{i}")]
     S.cmd(f"setblock {x} {Y} {z+1} minecraft:lever[face=floor,facing=north,powered={'true' if on else 'false'}]")
 
 def run_lamp():
@@ -104,6 +104,8 @@ if __name__ == "__main__":
         print("RESET"); press("bRst"); S.step(w)
         pc = sum((1 if (S.power((ports[("PCL", f"q{i}")][0], Y + 0, ports[("PCL", f"q{i}")][1]), None, (0, 0, 0)) or 0) > 0 else 0) << i for i in range(0)) if False else None
         print("после RESET: run", run_lamp(), "регистры", [hex(r) for r in regs()], flush=True)
+    if "--slow" in sys.argv:
+        lever("slow", True); S.step(300); print("рычаг SLOW включён")
     print("START"); press("bStart")
     waited = 0
     while waited < 60000:

@@ -204,6 +204,22 @@ def write_datapack(g: Grid, outdir, name="rc8", tile=96, base=(0, 0, 0), anchor=
     for (ti, tj), ((ox, oy, oz), (sx, sy, sz), bl) in sorted(tl.items()):
         dx, dy, dz = ox - gx0 + base[0], oy - gy0 + base[1], oz - gz0 + base[2]
         upd.append(f"clone ~{dx} ~{dy} ~{dz} ~{dx+sx-1} ~{dy+sy-1} ~{dz+sz-1} ~{dx} ~{dy} ~{dz} replace force")
+    # подготовка площадки: принудительная загрузка чанков и подложка-«плата» (серый бетон) под всей схемой
+    prep = [f"# {ns}: подготовка площадки (запускать ТОЙ ЖЕ точке, что и {ns}:build)"]
+    X0, X1 = bx0 - gx0 + base[0] - 4, bx1 - gx0 + base[0] + 4
+    Z0, Z1 = bz0 - gz0 + base[2] - 4, bz1 - gz0 + base[2] + 4
+    for xa in range(X0, X1 + 1, 192):
+        for za in range(Z0, Z1 + 1, 192):
+            prep.append(f"forceload add ~{xa} ~{za} ~{min(xa + 191, X1)} ~{min(za + 191, Z1)}")
+    for xa in range(X0, X1 + 1, 128):
+        for za in range(Z0, Z1 + 1, 128):
+            prep.append(f"fill ~{xa} ~-1 ~{za} ~{min(xa + 127, X1)} ~-1 ~{min(za + 127, Z1)} minecraft:gray_concrete")
+    with open(os.path.join(root, "data", ns, "function", "prepare.mcfunction"), "w") as f:
+        f.write("\n".join(prep) + "\n")
+    unp = [f"forceload remove ~{xa} ~{za} ~{min(xa + 191, X1)} ~{min(za + 191, Z1)}"
+           for xa in range(X0, X1 + 1, 192) for za in range(Z0, Z1 + 1, 192)]
+    with open(os.path.join(root, "data", ns, "function", "unload.mcfunction"), "w") as f:
+        f.write("# снять принудительную загрузку чанков (машина остановится, если игрока нет рядом)\n" + "\n".join(unp) + "\n")
     lines += ["# второй проход: обновления соседей, чтобы факелы/повторители/компараторы начали работать"] + upd
     # маркер-«якорь» запоминает точку постройки; отложенные функции работают относительно него
     lines += [f"kill @e[type=marker,tag={ns}_origin]", f'summon marker ~ ~ ~ {{Tags:["{ns}_origin"]}}',
